@@ -2,7 +2,7 @@
 name: Ask for a new Arma 3 map
 about: Ask for a new Arma 3 map on atlas.plan-ops.fr / maps.plan-ops.fr
 title: Add new map [name of the map]
-labels: ''
+labels: new map
 assignees: jetelain
 
 ---
