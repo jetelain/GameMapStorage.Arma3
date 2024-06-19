@@ -14,5 +14,7 @@
         public double FactorY { get; set; }
         public int TileSize { get; set; }
         public required PackageLocation[] Locations { get; set; }
+        public double OriginX { get; set; }
+        public double OriginY { get; set; }
     }
 }
