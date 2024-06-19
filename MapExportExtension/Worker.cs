@@ -55,7 +55,9 @@ namespace MapExportExtension
                         double.Parse(args[1], CultureInfo.InvariantCulture), 
                         ArmaSerializer.ParseMixedArray(args[2]), 
                         ArmaSerializer.ParseDoubleArray(args[3]),
-                        ArmaSerializer.ParseString(args[4]));
+                        ArmaSerializer.ParseString(args[4]),
+                        ArmaSerializer.ParseDouble(args[5]),
+                        ArmaSerializer.ParseDouble(args[6]));
                     return;
                 case "histart":
                     HiResStart();
@@ -133,7 +135,7 @@ namespace MapExportExtension
             }
         }
 
-        private static void Start(string worldName, double worldSize, object[] cities, double[] center, string title)
+        private static void Start(string worldName, double worldSize, object[] cities, double[] center, string title, double? offsetX, double? offsetY)
         {
             IsHiRes = false;
             currentMap = new PackageIndex()
@@ -147,7 +149,9 @@ namespace MapExportExtension
                     new PackageImage(0, 1, "base.png"), 
                     new PackageImage(2, 2, "hires.png")
                     ],
-                Culture = string.Empty
+                Culture = string.Empty,
+                OriginX = (offsetX ?? 0),
+                OriginY = (offsetY  ?? 0) - worldSize
             };
             mapDataPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Arma3MapExporter", "maps", currentMap.MapName);
             if (!Directory.Exists(mapDataPath))
