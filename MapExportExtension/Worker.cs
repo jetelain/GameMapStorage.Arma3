@@ -150,7 +150,7 @@ namespace MapExportExtension
                     new PackageImage(2, 2, "hires.png")
                     ],
                 Culture = string.Empty,
-                OriginX = (offsetX ?? 0),
+                OriginX = -(offsetX ?? 0),
                 OriginY = (offsetY  ?? 0) - worldSize
             };
             mapDataPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Arma3MapExporter", "maps", currentMap.MapName);
