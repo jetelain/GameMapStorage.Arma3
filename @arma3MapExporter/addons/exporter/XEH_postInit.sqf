@@ -26,6 +26,8 @@ a3me_export = {
 
 	private _center = getArray (configFile >> "CfgWorlds" >> worldName >> "centerPosition");
 	private _title = getText (configFile >> "CfgWorlds" >> worldName >> "description");
+	private _offsetX = getNumber (configFile >> "CfgWorlds" >> worldName >> "grid" >> "offsetX");
+	private _offsetY = getNumber (configFile >> "CfgWorlds" >> worldName >> "grid" >> "offsetY");
 	
 	private _cities = []; 
 	{
@@ -34,21 +36,21 @@ a3me_export = {
 
 	INFO("Start");
 
-	"mapExportExtension" callExtension ["start", [worldName, worldSize, _cities, _center, _title]];
+	"mapExportExtension" callExtension ["start", [worldName, worldSize, _cities, _center, _title, _offsetX, _offsetY]];
 
 	private _calibrateData = [1000] call FUNC(calibrate);
 
 	_calibrateData call FUNC(screenShotLoop);
 
-	systemChat "Generate tiles...";
+	systemChat "Save image...";
 	sleep 0.2;
 
 	INFO("Stop");
 	"mapExportExtension" callExtension ["stop", [worldName, worldSize]];
 
-	systemChat "Taking screenshots for HiRes...";
-
 	if ( worldSize < 40960 ) then {
+	
+		systemChat "Taking screenshots for HiRes...";
 
 		INFO("Start");
 
@@ -56,7 +58,7 @@ a3me_export = {
 
 		(_calibrateData call FUNC(recalibrate)) call FUNC(screenShotLoop);
 
-		systemChat "Generate tiles for HiRes...";
+		systemChat "Save image for HiRes...";
 		sleep 0.2;
 
 		INFO("Stop");
