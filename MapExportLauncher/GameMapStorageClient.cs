@@ -1,5 +1,7 @@
 using System.Net.Http.Headers;
+using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace MapExportLauncher;
 
@@ -8,6 +10,8 @@ namespace MapExportLauncher;
 public class GameMapStorageClient
 {
     private readonly LauncherConfig _config;
+
+    static readonly JsonSerializerOptions jsonSerializeOptions = new JsonSerializerOptions() { Converters = { new JsonStringEnumConverter() }, PropertyNameCaseInsensitive = true };
 
     public GameMapStorageClient(LauncherConfig config)
     {
@@ -35,11 +39,7 @@ public class GameMapStorageClient
                 "Check ApiKeyId and ApiKey in launcher-config.json.");
         }
 
-        var tokenJson = await tokenResponse.Content.ReadAsStringAsync();
-        using var tokenDoc = JsonDocument.Parse(tokenJson);
-
-        // ASP.NET Core BearerToken returns snake_case "access_token"
-        var token = tokenDoc.RootElement.GetProperty("access_token").GetString()
+        var token = (await tokenResponse.Content.ReadFromJsonAsync<AccessTokenResponse>(jsonSerializeOptions))?.AccessToken
             ?? throw new InvalidOperationException("Bearer token response did not contain 'access_token'.");
 
         http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);

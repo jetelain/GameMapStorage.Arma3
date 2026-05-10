@@ -47,7 +47,7 @@ namespace MapExportExtension
                 case "dispose":
                     if (_session != null)
                     {
-                        _session.PackAndUpload();
+                        _session.Pack();
                         _session.Dispose();
                         _session = null;
                     }

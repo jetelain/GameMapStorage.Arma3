@@ -207,13 +207,17 @@ namespace MapExportExtension
             FullImage.Mutate(i => i.DrawImage(data, point, 1f));
         }
 
-        public void PackAndUpload()
+        public void Pack()
         {
             Task.Run(() =>
             {
                 try
                 {
                     var zipPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Arma3MapExporter", "maps", _map.MapName + ".zip");
+                    if (File.Exists(zipPath))
+                    {
+                        File.Delete(zipPath);
+                    }
                     using var zip = ZipFile.Open(zipPath, ZipArchiveMode.Create);
                     zip.CreateEntryFromFile(Path.Combine(_dataPath, "index.json"), "index.json");
                     foreach (var img in _map.Images)
@@ -225,8 +229,6 @@ namespace MapExportExtension
                 {
                     Extension.ErrorMessage($"Unable to generate archive: {ex.Message}");
                 }
-                // TODO: upload to server
-
                 Extension.Callback("Complete", _map.MapName);
             });
         }
