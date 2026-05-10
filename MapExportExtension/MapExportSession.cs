@@ -69,7 +69,7 @@ namespace MapExportExtension
                 OriginX = -(offsetX ?? 0),
                 OriginY = (offsetY ?? 0) - worldSize,
                 SteamWorkshopId = Environment.GetEnvironmentVariable("A3ME_WORKSHOP_ID"),
-                SteamWorkshopAuthor = Environment.GetEnvironmentVariable("A3ME_WORKSHOP_AUTHOR")
+                AppendAttribution = Environment.GetEnvironmentVariable("A3ME_WORKSHOP_AUTHOR") // Use steam workshop author as default attribution (can be edited later on GameMapStorage)
             };
 
             _dataPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Arma3MapExporter", "maps", _map.MapName);
