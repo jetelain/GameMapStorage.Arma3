@@ -16,5 +16,7 @@
         public required PackageLocation[] Locations { get; set; }
         public double OriginX { get; set; }
         public double OriginY { get; set; }
+        public string? SteamWorkshopId { get; set; }
+        public string? AppendAttribution { get; set; }
     }
 }

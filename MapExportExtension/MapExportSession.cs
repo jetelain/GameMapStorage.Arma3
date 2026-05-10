@@ -14,7 +14,18 @@ namespace MapExportExtension
     {
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool GetWindowRect(nint hWnd, out RECT lpRect);
+        private static extern bool GetClientRect(nint hWnd, out RECT lpRect);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool ClientToScreen(nint hWnd, ref POINT lpPoint);
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct POINT
+        {
+            public int X;
+            public int Y;
+        }
 
         [StructLayout(LayoutKind.Sequential)]
         public struct RECT
@@ -56,7 +67,9 @@ namespace MapExportExtension
                 Images = [new PackageImage(0, 1, "base.png")],
                 Culture = string.Empty,
                 OriginX = -(offsetX ?? 0),
-                OriginY = (offsetY ?? 0) - worldSize
+                OriginY = (offsetY ?? 0) - worldSize,
+                SteamWorkshopId = Environment.GetEnvironmentVariable("A3ME_WORKSHOP_ID"),
+                AppendAttribution = Environment.GetEnvironmentVariable("A3ME_WORKSHOP_AUTHOR") // Use steam workshop author as default attribution (can be edited later on GameMapStorage)
             };
 
             _dataPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Arma3MapExporter", "maps", _map.MapName);
@@ -71,13 +84,16 @@ namespace MapExportExtension
             _safeZoneH = safeZone[3];
 
             // We assume that the game window will not be moved or resized during the session, so we only get the position once at the start
-            GetWindowRect(System.Diagnostics.Process.GetCurrentProcess().MainWindowHandle, out RECT lpRect);
-            _screenX = lpRect.Left;
-            _screenY = lpRect.Top;
-            _screenW = lpRect.Right - lpRect.Left;
-            _screenH = lpRect.Bottom - lpRect.Top;
+            var hwnd = System.Diagnostics.Process.GetCurrentProcess().MainWindowHandle;
+            GetClientRect(hwnd, out RECT clientRect);
+            var origin = new POINT { X = 0, Y = 0 };
+            ClientToScreen(hwnd, ref origin);
+            _screenX = origin.X;
+            _screenY = origin.Y;
+            _screenW = clientRect.Right;
+            _screenH = clientRect.Bottom;
 
-            Extension.DebugMessage($"ScreenX={_screenX} ScreenY={_screenY} ScreenH={_screenH} ScreenW={_screenW}");
+            Extension.InfoMessage($"ScreenX={_screenX} ScreenY={_screenY} ScreenH={_screenH} ScreenW={_screenW}");
 
             var pxA = ArmaToScreen(pA);
             var pxB = ArmaToScreen(pB);
@@ -191,13 +207,17 @@ namespace MapExportExtension
             FullImage.Mutate(i => i.DrawImage(data, point, 1f));
         }
 
-        public void PackAndUpload()
+        public void Pack()
         {
             Task.Run(() =>
             {
                 try
                 {
                     var zipPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Arma3MapExporter", "maps", _map.MapName + ".zip");
+                    if (File.Exists(zipPath))
+                    {
+                        File.Delete(zipPath);
+                    }
                     using var zip = ZipFile.Open(zipPath, ZipArchiveMode.Create);
                     zip.CreateEntryFromFile(Path.Combine(_dataPath, "index.json"), "index.json");
                     foreach (var img in _map.Images)
@@ -209,8 +229,6 @@ namespace MapExportExtension
                 {
                     Extension.ErrorMessage($"Unable to generate archive: {ex.Message}");
                 }
-                // TODO: upload to server
-
                 Extension.Callback("Complete", _map.MapName);
             });
         }

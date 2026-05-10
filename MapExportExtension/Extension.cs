@@ -7,7 +7,6 @@ namespace MapExportExtension
     internal static class Extension
     {   
 		private static ExtensionCallback? callback;
-        private static bool debugCallback;
 
         [UnmanagedFunctionPointer(CallingConvention.StdCall)]
 		delegate int ExtensionCallback([MarshalAs(UnmanagedType.LPStr)] string name, [MarshalAs(UnmanagedType.LPStr)] string function, [MarshalAs(UnmanagedType.LPStr)] string data);
@@ -59,11 +58,6 @@ namespace MapExportExtension
             var sw = Stopwatch.StartNew();
             try
             {
-                if (function == "Debug")
-                {
-                    debugCallback = args.Length == 0 || args[0] == "true";
-                    return 0;
-                }
                 if (function == "Warmup")
                 {
                     return 0;
@@ -86,7 +80,6 @@ namespace MapExportExtension
                 ErrorMessage($"{e.GetType().Name} {e.Message}.");
                 Trace.WriteLine(e.ToString());
             }
-            DebugMessage($"{function}: {sw.ElapsedTicks} ticks in RvExtensionArgs.");
             return 0;
         }
 
@@ -95,13 +88,10 @@ namespace MapExportExtension
             callback?.Invoke("a3me", function, data);
         }
 
-        public static void DebugMessage(string message)
+        public static void InfoMessage(string message)
         {
             Trace.WriteLine(message);
-            if (debugCallback)
-            {
-                Callback("Info", message);
-            }
+            Callback("Info", message);
         }
 		
         public static void ErrorMessage(string message)

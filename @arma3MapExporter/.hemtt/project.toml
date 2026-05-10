@@ -1,0 +1,17 @@
+name = "Arma3 Map Exporter"
+prefix = "a3me"
+author = "GrueArbre"
+template = "cba"
+mainprefix = "z"
+folder_optionals = false
+sig_version = 3
+
+[version]
+path = "addons/main/script_version.hpp"
+git_hash = 0
+
+[files]
+include = [
+    "mod.cpp",
+    "MapExportExtension_x64.dll"
+]
