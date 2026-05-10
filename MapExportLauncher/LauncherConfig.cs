@@ -22,4 +22,11 @@ public class LauncherConfig
     /// Defaults to CBA_A3 (450814997).
     /// </summary>
     public List<string> BaseWorkshopMods { get; set; } = ["450814997"];
+
+    /// <summary>
+    /// Steam Web API key used to automatically discover mod dependencies.
+    /// Get one at https://steamcommunity.com/dev/apikey
+    /// If null, automatic dependency discovery is skipped.
+    /// </summary>
+    public string? SteamApiKey { get; set; }
 }

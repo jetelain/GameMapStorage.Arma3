@@ -67,7 +67,9 @@ namespace MapExportExtension
                 Images = [new PackageImage(0, 1, "base.png")],
                 Culture = string.Empty,
                 OriginX = -(offsetX ?? 0),
-                OriginY = (offsetY ?? 0) - worldSize
+                OriginY = (offsetY ?? 0) - worldSize,
+                SteamWorkshopId = Environment.GetEnvironmentVariable("A3ME_WORKSHOP_ID"),
+                SteamWorkshopAuthor = Environment.GetEnvironmentVariable("A3ME_WORKSHOP_AUTHOR")
             };
 
             _dataPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Arma3MapExporter", "maps", _map.MapName);

@@ -9,13 +9,15 @@ public class Arma3Launcher
 {
     private readonly LauncherConfig _config;
     private readonly string _worldName;
+    private readonly IReadOnlyDictionary<string, string> _extraEnvironment;
     private readonly List<string> _workshopMods;
     private readonly string _workspace;
 
-    public Arma3Launcher(LauncherConfig config, string worldName, List<string> workshopMods)
+    public Arma3Launcher(LauncherConfig config, string worldName, List<string> workshopMods, IReadOnlyDictionary<string, string>? extraEnvironment = null)
     {
         _config = config;
         _worldName = worldName;
+        _extraEnvironment = extraEnvironment ?? new Dictionary<string, string>();
         _workshopMods = workshopMods;
         _workspace = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
@@ -124,13 +126,20 @@ public class Arma3Launcher
 
         Console.WriteLine($"Launching: Arma3_x64.exe {arguments}");
 
-        var process = Process.Start(new ProcessStartInfo
+        var psi = new ProcessStartInfo
         {
             UseShellExecute = false,
             FileName = Path.Combine(arma3Path, "Arma3_x64.exe"),
             WorkingDirectory = arma3Path,
             Arguments = arguments
-        }) ?? throw new InvalidOperationException("Failed to start Arma 3.");
+        };
+
+        foreach (var (key, value) in _extraEnvironment)
+        {
+            psi.Environment[key] = value;
+        }
+
+        var process = Process.Start(psi) ?? throw new InvalidOperationException("Failed to start Arma 3.");
 
         return process;
     }
@@ -228,6 +237,9 @@ public class Arma3Launcher
         }
         return path;
     }
+
+    /// <summary>Returns the Arma 3 install path, or throws if not found. Public for use by world discovery.</summary>
+    public static string GetArma3PathStatic() => GetArma3Path();
 
     private static string GetArma3WorkshopPath(string arma3Path)
     {

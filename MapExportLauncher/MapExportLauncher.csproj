@@ -11,4 +11,8 @@
 	<ItemGroup>
 		<EmbeddedResource Include="data\*" />
 	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\extern\bis-file-formats\BIS.PBO\BIS.PBO.csproj" />
+	</ItemGroup>
 </Project>
