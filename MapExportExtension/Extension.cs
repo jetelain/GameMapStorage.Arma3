@@ -68,9 +68,9 @@ namespace MapExportExtension
                 {
                     return 0;
                 }
-                if (!string.IsNullOrEmpty(function))
+                if (!string.IsNullOrEmpty(function) && args.All(arg => arg != null))
                 {
-                    Worker.Message(function, args);
+                    Worker.Message(function, args!);
                 }
             }
             catch (AggregateException ae)

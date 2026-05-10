@@ -11,6 +11,9 @@ addMissionEventHandler ["ExtensionCallback", {
 		if( _function == "Error" ) exitWith {
 			ERROR(_data);
 		};
+		if( _function == "Complete" ) exitWith {
+			systemChat "Package is ready to be used !";
+		};
 	};
 }];
 
@@ -66,7 +69,7 @@ a3me_export = {
 
 	};
 
-	systemChat "It's done !";
+	systemChat "Images are ready";
 
 	"mapExportExtension" callExtension ["dispose", [worldName, worldSize]];
 };
