@@ -42,7 +42,7 @@ namespace MapExportExtension
 
         public Image<Rgba32>? FullImage { get; private set; }
 
-        public MapExportSession(string worldName, double worldSize, object[] cities, string title, double? offsetX, double? offsetY)
+        public MapExportSession(string worldName, double worldSize, object?[]? cities, string title, double? offsetX, double? offsetY)
         {
             _map = new PackageIndex()
             {
@@ -50,7 +50,7 @@ namespace MapExportExtension
                 SizeInMeters = worldSize,
                 MapName = worldName.ToLowerInvariant(),
                 EnglishTitle = title,
-                Locations = cities.Cast<object[]>().Select(c => new PackageLocation((string)c[0], 0, (double)((object[])c[1])[0], (double)((object[])c[1])[1])).ToArray(),
+                Locations = cities?.Cast<object[]>().Select(c => new PackageLocation((string)c[0], 0, (double)((object[])c[1])[0], (double)((object[])c[1])[1])).ToArray() ?? Array.Empty<PackageLocation>(),
                 Images = [new PackageImage(0, 1, "base.png")],
                 Culture = string.Empty,
                 OriginX = -(offsetX ?? 0),
@@ -160,9 +160,12 @@ namespace MapExportExtension
                 FullImage.Dispose();
                 FullImage = null;
 
-                var hiresMinZoom = _map.Images[0].MaxZoom + 1;
-                _map.Images = [.. _map.Images, new PackageImage(hiresMinZoom, hiresMinZoom, "hires.png")];
-                WriteIndexJson();
+                if (!_map.Images.Any(i => i.FileName == "hires.png"))
+                {
+                    var hiresMinZoom = _map.Images[0].MaxZoom + 1;
+                    _map.Images = [.. _map.Images, new PackageImage(hiresMinZoom, hiresMinZoom, "hires.png")];
+                    WriteIndexJson();
+                }
             }
         }
 
@@ -187,12 +190,19 @@ namespace MapExportExtension
         {
             Task.Run(() =>
             {
-                var zipPath = Path.Combine(_dataPath, _map.MapName + ".zip");
-                using var zip = ZipFile.Open(zipPath, ZipArchiveMode.Create);
-                zip.CreateEntryFromFile(Path.Combine(_dataPath, "index.json"), "index.json");
-                foreach (var pngFile in Directory.EnumerateFiles(_dataPath, "*.png"))
+                try
                 {
-                    zip.CreateEntryFromFile(pngFile, Path.GetFileName(pngFile));
+                    var zipPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Arma3MapExporter", "maps", _map.MapName + ".zip");
+                    using var zip = ZipFile.Open(zipPath, ZipArchiveMode.Create);
+                    zip.CreateEntryFromFile(Path.Combine(_dataPath, "index.json"), "index.json");
+                    foreach (var img in _map.Images)
+                    {
+                        zip.CreateEntryFromFile(Path.Combine(_dataPath, img.FileName), img.FileName);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Extension.ErrorMessage($"Unable to generate archive: {ex.Message}");
                 }
                 // TODO: upload to server
             });

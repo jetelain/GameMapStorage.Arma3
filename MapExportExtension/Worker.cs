@@ -13,10 +13,10 @@ namespace MapExportExtension
                 case "start":
                     _session?.Dispose();
                     _session = new MapExportSession(
-                        ArmaSerializer.ParseString(args[0]),
+                        ArmaSerializer.ParseString(args[0]) ?? string.Empty,
                         double.Parse(args[1], CultureInfo.InvariantCulture),
                         ArmaSerializer.ParseMixedArray(args[2]),
-                        ArmaSerializer.ParseString(args[4]),
+                        ArmaSerializer.ParseString(args[4]) ?? string.Empty,
                         ArmaSerializer.ParseDouble(args[5]),
                         ArmaSerializer.ParseDouble(args[6]));
                     return;
