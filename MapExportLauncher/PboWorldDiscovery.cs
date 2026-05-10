@@ -20,6 +20,7 @@ public static class PboWorldDiscovery
     public static List<DiscoveredWorld> DiscoverWorlds(IEnumerable<(string SteamId, string Directory)> mods)
     {
         var worlds = new List<DiscoveredWorld>();
+        var seenWorlds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var (steamId, modDir) in mods)
         {
@@ -34,7 +35,10 @@ public static class PboWorldDiscovery
                 {
                     foreach (var worldName in GetWorldNamesFromPbo(pboPath))
                     {
-                        worlds.Add(new DiscoveredWorld(worldName, steamId));
+                        if (seenWorlds.Add(worldName))
+                        {
+                            worlds.Add(new DiscoveredWorld(worldName, steamId));
+                        }
                     }
                 }
                 catch (Exception ex)
