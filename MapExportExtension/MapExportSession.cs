@@ -14,7 +14,18 @@ namespace MapExportExtension
     {
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool GetWindowRect(nint hWnd, out RECT lpRect);
+        private static extern bool GetClientRect(nint hWnd, out RECT lpRect);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool ClientToScreen(nint hWnd, ref POINT lpPoint);
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct POINT
+        {
+            public int X;
+            public int Y;
+        }
 
         [StructLayout(LayoutKind.Sequential)]
         public struct RECT
@@ -71,13 +82,16 @@ namespace MapExportExtension
             _safeZoneH = safeZone[3];
 
             // We assume that the game window will not be moved or resized during the session, so we only get the position once at the start
-            GetWindowRect(System.Diagnostics.Process.GetCurrentProcess().MainWindowHandle, out RECT lpRect);
-            _screenX = lpRect.Left;
-            _screenY = lpRect.Top;
-            _screenW = lpRect.Right - lpRect.Left;
-            _screenH = lpRect.Bottom - lpRect.Top;
+            var hwnd = System.Diagnostics.Process.GetCurrentProcess().MainWindowHandle;
+            GetClientRect(hwnd, out RECT clientRect);
+            var origin = new POINT { X = 0, Y = 0 };
+            ClientToScreen(hwnd, ref origin);
+            _screenX = origin.X;
+            _screenY = origin.Y;
+            _screenW = clientRect.Right;
+            _screenH = clientRect.Bottom;
 
-            Extension.DebugMessage($"ScreenX={_screenX} ScreenY={_screenY} ScreenH={_screenH} ScreenW={_screenW}");
+            Extension.InfoMessage($"ScreenX={_screenX} ScreenY={_screenY} ScreenH={_screenH} ScreenW={_screenW}");
 
             var pxA = ArmaToScreen(pA);
             var pxB = ArmaToScreen(pB);

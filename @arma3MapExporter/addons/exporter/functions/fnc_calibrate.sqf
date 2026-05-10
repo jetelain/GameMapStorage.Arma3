@@ -15,7 +15,8 @@ if ( _zoom1 < 0.001 ) then {
 };
 private _zoom = _zoom1;
 
-private _control = (findDisplay 12) displayCtrl 51;
+private _mapDisplay = if (!isNull (findDisplay 9801)) then { findDisplay 9801 } else { findDisplay 12 };
+private _control = _mapDisplay displayCtrl 51;
 _control ctrlMapAnimAdd [0, _zoom, [_deltaX,_deltaY]];
 ctrlMapAnimCommit _control;
 sleep 0.5;

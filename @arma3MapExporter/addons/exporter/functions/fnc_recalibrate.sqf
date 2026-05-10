@@ -12,7 +12,8 @@ _w = _w / 2;
 private _dbg = [_zoom, _deltaX, _deltaY, _h, _w];
 INFO_1("%1",_dbg);
 
-private _control = (findDisplay 12) displayCtrl 51;
+private _mapDisplay = if (!isNull (findDisplay 9801)) then { findDisplay 9801 } else { findDisplay 12 };
+private _control = _mapDisplay displayCtrl 51;
 _control ctrlMapAnimAdd [0, _zoom, [_deltaX,_deltaY]];
 ctrlMapAnimCommit _control;
 sleep 0.5;
