@@ -32,6 +32,8 @@ namespace MapExportExtension
         private double _safeZoneY;
         private double _safeZoneW;
         private double _safeZoneH;
+        private int _screenX;
+        private int _screenY;
         private int _screenW;
         private int _screenH;
         private int _oneW;
@@ -68,11 +70,14 @@ namespace MapExportExtension
             _safeZoneW = safeZone[2];
             _safeZoneH = safeZone[3];
 
+            // We assume that the game window will not be moved or resized during the session, so we only get the position once at the start
             GetWindowRect(System.Diagnostics.Process.GetCurrentProcess().MainWindowHandle, out RECT lpRect);
-            _screenH = lpRect.Bottom;
-            _screenW = lpRect.Right;
+            _screenX = lpRect.Left;
+            _screenY = lpRect.Top;
+            _screenW = lpRect.Right - lpRect.Left;
+            _screenH = lpRect.Bottom - lpRect.Top;
 
-            Extension.DebugMessage($"ScreenH={_screenH} ScreenW={_screenW}");
+            Extension.DebugMessage($"ScreenX={_screenX} ScreenY={_screenY} ScreenH={_screenH} ScreenW={_screenW}");
 
             var pxA = ArmaToScreen(pA);
             var pxB = ArmaToScreen(pB);
@@ -205,6 +210,8 @@ namespace MapExportExtension
                     Extension.ErrorMessage($"Unable to generate archive: {ex.Message}");
                 }
                 // TODO: upload to server
+
+                Extension.Callback("Complete", _map.MapName);
             });
         }
 
@@ -232,7 +239,7 @@ namespace MapExportExtension
             using var bitmap = new System.Drawing.Bitmap(_screenW, _screenH);
             using (var g = System.Drawing.Graphics.FromImage(bitmap))
             {
-                g.CopyFromScreen(System.Drawing.Point.Empty, System.Drawing.Point.Empty, new System.Drawing.Size(_screenW, _screenH));
+                g.CopyFromScreen(new System.Drawing.Point(_screenX, _screenY), System.Drawing.Point.Empty, new System.Drawing.Size(_screenW, _screenH));
             }
             using var ms = new MemoryStream();
             bitmap.Save(ms, System.Drawing.Imaging.ImageFormat.Png);
