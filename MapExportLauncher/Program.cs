@@ -14,16 +14,31 @@ for (int i = 0; i < args.Length; i++)
     switch (args[i])
     {
         case "--world":
+            if (i + 1 >= args.Length)
+            {
+                Console.Error.WriteLine("Error: --world requires an argument.");
+                return 1;
+            }
             worldName = args[++i];
             break;
         case "--mods":
+            if (i + 1 >= args.Length)
+            {
+                Console.Error.WriteLine("Error: --mods requires an argument.");
+                return 1;
+            }
             workshopMods.AddRange(args[++i].Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+            break;
+        case "--config":
+            if (i + 1 >= args.Length)
+            {
+                Console.Error.WriteLine("Error: --config requires an argument.");
+                return 1;
+            }
+            configPath = args[++i];
             break;
         case "--upload":
             doUpload = true;
-            break;
-        case "--config":
-            configPath = args[++i];
             break;
         case "--help":
         case "-h":
@@ -86,7 +101,7 @@ else
     Console.WriteLine($"Discovered {worldsToExport.Count} world(s): {string.Join(", ", worldsToExport.Select(w => $"{w.WorldName} (Steam ID: {w.SteamId})"))}");
 }
 
-var steam = !string.IsNullOrEmpty(config.SteamApiKey) ? new SteamWorkshopClient(config.SteamApiKey) : null;
+var steam = !string.IsNullOrEmpty(config.SteamApiKey) ? new SteamWorkshopClient(config.SteamApiKey, config.BaseWorkshopMods) : null;
 
 // ── Auto-discover mod dependencies via Steam Web API ─────────────────────────
 if (steam != null && workshopMods.Count > 0)

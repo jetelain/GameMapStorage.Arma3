@@ -11,17 +11,12 @@ internal sealed class SteamWorkshopClient
     private readonly HttpClient _http = new();
     private readonly string _apiKey;
     private readonly Dictionary<string, List<string>> _cache = new();
+    private readonly HashSet<string> _baseWorkshopMods;
 
-    // CBA_A3 workshop ID – it reports itself as a dependency of almost everything
-    // but it is already in BaseWorkshopMods, so we skip it to avoid duplicates.
-    private static readonly HashSet<string> SkippedIds = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "385314016", // Remove from required
-    };
-
-    public SteamWorkshopClient(string apiKey)
+    public SteamWorkshopClient(string apiKey, List<string> baseWorkshopMods)
     {
         _apiKey = apiKey;
+        _baseWorkshopMods = baseWorkshopMods.ToHashSet(StringComparer.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -47,7 +42,7 @@ internal sealed class SteamWorkshopClient
 
         foreach (var dep in directDeps)
         {
-            if (SkippedIds.Contains(dep))
+            if (_baseWorkshopMods.Contains(dep))
             {
                 continue;
             }
