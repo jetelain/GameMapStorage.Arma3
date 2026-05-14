@@ -13,6 +13,7 @@ public class GameMapStorageClient : IDisposable
 
     private readonly GameMapStorageAdminClient _clientAdmin;
     private readonly Pmad.GameMapStorage.Client.GameMapStorageClient _clientPublic;
+    private bool _isAuthenticated;
 
     public GameMapStorageClient(LauncherConfig config)
     {
@@ -39,7 +40,7 @@ public class GameMapStorageClient : IDisposable
 
     public async Task CreateLayerAsync(string zipPath)
     {
-        await _clientAdmin.AuthenticateAsync(_config.ApiKeyId!.Value, _config.ApiKey!).ConfigureAwait(false);
+        await EnsureAuthenticated().ConfigureAwait(false);
 
         await using var fileStream = File.OpenRead(zipPath);
 
@@ -50,13 +51,22 @@ public class GameMapStorageClient : IDisposable
 
     public async Task UpdateLayerAsync(int layerId, string zipPath)
     {
-        await _clientAdmin.AuthenticateAsync(_config.ApiKeyId!.Value, _config.ApiKey!).ConfigureAwait(false);
+        await EnsureAuthenticated().ConfigureAwait(false);
 
         await using var fileStream = File.OpenRead(zipPath);
 
         Console.WriteLine($"Uploading {Path.GetFileName(zipPath)} ({new FileInfo(zipPath).Length / 1024 / 1024} MB)...");
 
         await _clientAdmin.UpdateLayerFromPackageAsync(layerId, fileStream, Path.GetFileName(zipPath)).ConfigureAwait(false);
+    }
+
+    private async Task EnsureAuthenticated()
+    {
+        if (!_isAuthenticated)
+        {
+            await _clientAdmin.AuthenticateAsync(_config.ApiKeyId!.Value, _config.ApiKey!).ConfigureAwait(false);
+            _isAuthenticated = true;
+        }
     }
 
     public async Task<GameMapLayerJson?> GetExistingLayerAsync(string name, LayerType layerType)
