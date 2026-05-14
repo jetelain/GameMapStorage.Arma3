@@ -10,7 +10,7 @@ namespace MapExportExtension
         {
             switch (function)
             {
-                case "start":
+                case "map":
                     _session?.Dispose();
                     _session = new MapExportSession(
                         ArmaSerializer.ParseString(args[0]) ?? string.Empty,
@@ -20,16 +20,21 @@ namespace MapExportExtension
                         ArmaSerializer.ParseDouble(args[5]),
                         ArmaSerializer.ParseDouble(args[6]));
                     return;
-                case "histart":
-                    _session?.HiResStart();
+                case "initscreen":
+                    _session?.InitScreen(
+                        ArmaSerializer.ParseDoubleArray(args[0]));
                     return;
                 case "calibrate":
-                    _session?.Calibrate(
+                    _session?.Calibrate(false,
                         ArmaSerializer.ParseDoubleArray(args[0]),
                         ArmaSerializer.ParseDoubleArray(args[1]),
-                        ArmaSerializer.ParseDoubleArray(args[2]),
-                        int.Parse(args[3]),
-                        int.Parse(args[4]));
+                        int.Parse(args[2]));
+                    return;
+                case "hicalibrate":
+                    _session?.Calibrate(true,
+                        ArmaSerializer.ParseDoubleArray(args[0]),
+                        ArmaSerializer.ParseDoubleArray(args[1]),
+                        int.Parse(args[2]));
                     return;
                 case "screenshot":
                     _session?.ScreenShot(
@@ -43,9 +48,6 @@ namespace MapExportExtension
                     return;
                 case "histop":
                     _session?.HiResStop();
-                    return;
-                case "aerialstart":
-                    _session?.AerialStart();
                     return;
                 case "aerialcalibrate":
                     _session?.AerialCalibrate(double.Parse(args[0], CultureInfo.InvariantCulture));
@@ -69,6 +71,9 @@ namespace MapExportExtension
                         _session.Dispose();
                         _session = null;
                     }
+                    return;
+                default:
+                    Extension.ErrorMessage($"Unknown function: {function}");
                     return;
             }
         }

@@ -1,6 +1,6 @@
 #include "script_component.hpp"
 
-INFO("AerialCalibrate");
+INFO("Calibrate Aerial");
 
 // _this = [_zoom, _deltaX, _deltaY, _h, _w] — same layout as fnc_screenShotLoop
 params ["_zoom", "_deltaX", "_deltaY", "_h", "_w"];

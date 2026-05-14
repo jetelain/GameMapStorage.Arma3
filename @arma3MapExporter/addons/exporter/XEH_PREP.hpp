@@ -1,5 +1,5 @@
 PREP(calibrate);
-PREP(recalibrate);
+PREP(hiresCalibrate);
 PREP(screenShotLoop);
 PREP(aerialCalibrate);
 PREP(aerialLoop);

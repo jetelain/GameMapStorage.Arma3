@@ -31,7 +31,6 @@ while { _x <= worldSize } do {
 		private _posC = _cam worldToScreen [_x + _tileSizeM, _y, 0]; // SE
 		private _posD = _cam worldToScreen [_x, _y + _tileSizeM, 0]; // NW
 		private _args = [_x, _y, _posA, _posB, _posC, _posD];
-		INFO_1("aerialscreenshot(%1)", _args);
 		"mapExportExtension" callExtension ["aerialscreenshot", _args];
 
 		_y = _y + _tileSizeM;

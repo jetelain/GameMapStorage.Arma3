@@ -41,35 +41,37 @@ a3me_export = {
 		sleep 1;
 	};
 
-	INFO("Start");
+	INFO("Start TopoBase");
 
-	"mapExportExtension" callExtension ["start", [worldName, worldSize, _cities, _center, _title, _offsetX, _offsetY]];
+	// Send map infos
+	"mapExportExtension" callExtension ["map", [worldName, worldSize, _cities, _center, _title, _offsetX, _offsetY]];
+
+	// Send screen infos (for screenshot coordinates calculations)
+	"mapExportExtension" callExtension ["initscreen", [[safeZoneXAbs, safeZoneY, safeZoneWAbs, safeZoneH]]];
 
 	private _calibrateData = [1000] call FUNC(calibrate);
-
+	
 	_calibrateData call FUNC(screenShotLoop);
 
 	systemChat "Save image...";
 	sleep 0.2;
 
-	INFO("Stop");
-	"mapExportExtension" callExtension ["stop", [worldName, worldSize]];
+	INFO("Stop TopoBase");
+	"mapExportExtension" callExtension ["stop", []];
 
 	if ( worldSize < 40960 ) then {
 	
 		systemChat "Taking screenshots for HiRes...";
 
-		INFO("Start");
+		INFO("Start TopoHiRes");
 
-		"mapExportExtension" callExtension ["histart", [worldName, worldSize]];
-
-		(_calibrateData call FUNC(recalibrate)) call FUNC(screenShotLoop);
+		(_calibrateData call FUNC(hiresCalibrate)) call FUNC(screenShotLoop);
 
 		systemChat "Save image for HiRes...";
 		sleep 0.2;
 
-		INFO("Stop");
-		"mapExportExtension" callExtension ["histop", [worldName, worldSize]];
+		INFO("Stop TopoHiRes");
+		"mapExportExtension" callExtension ["histop", []];
 	};
 
 	systemChat "Images are ready";
@@ -86,7 +88,7 @@ a3me_export = {
 
 		systemChat "Taking aerial screenshots...";
 
-		"mapExportExtension" callExtension ["aerialstart", []];
+		INFO("Start Aerial");
 
 		private _aerialData = _calibrateData call FUNC(aerialCalibrate);
 		_aerialData call FUNC(aerialLoop);
@@ -94,7 +96,7 @@ a3me_export = {
 		systemChat "Save aerial image...";
 		sleep 0.2;
 
-		INFO("AerialStop");
+		INFO("Stop Aerial");
 		"mapExportExtension" callExtension ["aerialstop", []];
 
 		(_aerialData select 0) cameraEffect ["terminate", "BACK"];
@@ -106,7 +108,7 @@ a3me_export = {
 	};
 
 	// Pack after all images (topo + aerial) have been saved.
-	"mapExportExtension" callExtension ["dispose", [worldName, worldSize]];
+	"mapExportExtension" callExtension ["dispose", []];
 };
 
 #define DIK_HOME 0xC7 /* Home on arrow keypad */

@@ -1,11 +1,9 @@
 using System.IO.Compression;
-using System.Runtime.InteropServices;
 using System.Text.Json;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
-using Image = SixLabors.ImageSharp.Image;
 using Point = SixLabors.ImageSharp.Point;
 using Rectangle = SixLabors.ImageSharp.Rectangle;
 
@@ -13,53 +11,19 @@ namespace MapExportExtension
 {
     internal sealed class MapExportSession : IDisposable
     {
-        [DllImport("user32.dll")]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool GetClientRect(nint hWnd, out RECT lpRect);
-
-        [DllImport("user32.dll")]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool ClientToScreen(nint hWnd, ref POINT lpPoint);
-
-        [StructLayout(LayoutKind.Sequential)]
-        private struct POINT
-        {
-            public int X;
-            public int Y;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        public struct RECT
-        {
-            public int Left;
-            public int Top;
-            public int Right;
-            public int Bottom;
-        }
-
         private readonly PackageIndex _map;
         private readonly string _dataPath;
 
-        private double _safeZoneX;
-        private double _safeZoneY;
-        private double _safeZoneW;
-        private double _safeZoneH;
-        private int _screenX;
-        private int _screenY;
-        private int _screenW;
-        private int _screenH;
-        private int _oneW;
-        private int _oneH;
-        private int _oneWPx;
-        private int _oneHPx;
+        private ScreenShotTileMetrics? _topo;
         private bool _isHiRes;
 
         private PackageIndex? _aerialMap;
-        private Image<Rgb24>? _aerialFullImageRectified;
-        private double _aerialTileSizeM;
-        private int _aerialTilePx;
-
+        private Image<Rgb24>? _aerialFullImage;
+        private ScreenShotTileMetrics? _aerial;
         private Image<Rgba32>? _fullImage;
+        private double _adjustedWorldSize;
+        private ArmaScreen? _armaScreen;
+
 
         public MapExportSession(string worldName, double worldSize, object?[]? cities, string title, double? offsetX, double? offsetY)
         {
@@ -68,6 +32,8 @@ namespace MapExportExtension
                 MaximumPoolSizeMegabytes = 32_768,
                 AllocationLimitMegabytes = 16_384 // a 40x40km map at 1.5px/ms is ~12GB, so 16GB limit for safety (max for aerial images)
             });
+
+            _adjustedWorldSize = worldSize;
 
             _map = new PackageIndex()
             {
@@ -88,51 +54,51 @@ namespace MapExportExtension
             Directory.CreateDirectory(_dataPath);
         }
 
-        public void Calibrate(double[] safeZone, double[] pA, double[] pB, int w, int h)
+        public void InitScreen(double[] safeZone)
         {
-            _safeZoneX = safeZone[0];
-            _safeZoneY = safeZone[1];
-            _safeZoneW = safeZone[2];
-            _safeZoneH = safeZone[3];
+            _armaScreen = new ArmaScreen(safeZone);
+            Extension.InfoMessage(_armaScreen.ToString());
+        }
 
-            // We assume that the game window will not be moved or resized during the session, so we only get the position once at the start
-            var hwnd = System.Diagnostics.Process.GetCurrentProcess().MainWindowHandle;
-            GetClientRect(hwnd, out RECT clientRect);
-            var origin = new POINT { X = 0, Y = 0 };
-            ClientToScreen(hwnd, ref origin);
-            _screenX = origin.X;
-            _screenY = origin.Y;
-            _screenW = clientRect.Right;
-            _screenH = clientRect.Bottom;
+        public void Calibrate(bool isHiRes, double[] pA, double[] pB, int size)
+        {
+            if (_armaScreen == null)
+            {
+                Extension.ErrorMessage("Invalid state: InitScreen was not called");
+                return;
+            }
 
-            Extension.InfoMessage($"ScreenX={_screenX} ScreenY={_screenY} ScreenH={_screenH} ScreenW={_screenW}");
+            _isHiRes = isHiRes;
 
-            var pxA = ArmaToScreen(pA);
-            var pxB = ArmaToScreen(pB);
+            var pxA = _armaScreen.ArmaToScreen(pA);
+            var pxB = _armaScreen.ArmaToScreen(pB);
 
-            _oneW = w;
-            _oneH = h;
-            _oneWPx = pxB.X - pxA.X;
-            _oneHPx = pxA.Y - pxB.Y;
-
-            var fullWidthInitialPx = _map.SizeInMeters * _oneWPx / w;
-            var fullHeightInitialPx = _map.SizeInMeters * _oneHPx / h;
-            var fullSizeInitialPx = Math.Max(fullWidthInitialPx, fullHeightInitialPx);
-
-            if (_isHiRes)
+            if (isHiRes)
             {
                 CalibrateHiRes();
             }
             else
             {
-                CalibrateInitial(fullWidthInitialPx, fullHeightInitialPx, fullSizeInitialPx);
+                CalibrateInitial(size, pxB.X - pxA.X, pxA.Y - pxB.Y);
             }
+
+            _topo = new ScreenShotTileMetrics(size, _fullImage!.Width, _adjustedWorldSize);
+
+            Extension.InfoMessage($"{TopoLayerName()}: {_topo}");
         }
 
-        private void CalibrateInitial(double fullWidthInitialPx, double fullHeightInitialPx, double fullSizeInitialPx)
+        private string TopoLayerName()
         {
-            var tileSizePx = (int)Math.Ceiling(fullSizeInitialPx);
+            return _isHiRes ? "TopoHiRes" : "TopoBase";
+        }
 
+        private void CalibrateInitial(double wantedTopoTileSizeM, double wantedTopoTileWidthPx, double wantedTopoTileHeightPx)
+        {
+            var fullWidthInitialPx = _map.SizeInMeters * wantedTopoTileWidthPx / wantedTopoTileSizeM;
+            var fullHeightInitialPx = _map.SizeInMeters * wantedTopoTileHeightPx / wantedTopoTileSizeM;
+            var fullSizeInitialPx = Math.Max(fullWidthInitialPx, fullHeightInitialPx);
+
+            var tileSizePx = (int)Math.Ceiling(fullSizeInitialPx);
             int maxZoom = 0;
             while (tileSizePx > 400)
             {
@@ -141,17 +107,13 @@ namespace MapExportExtension
             }
             tileSizePx++;
 
-            var fullSizePx = tileSizePx * (1 << maxZoom);
-
             _map.TileSize = tileSizePx;
             _map.Images[0].MaxZoom = maxZoom;
             _map.DefaultZoom = Math.Max(2, maxZoom / 2);
 
-            var adjustedWorldWidth = fullSizePx * _map.SizeInMeters / fullWidthInitialPx;
-            var adjustedWorldHeight = fullSizePx * _map.SizeInMeters / fullHeightInitialPx;
-
-            _map.FactorX = tileSizePx / adjustedWorldWidth;
-            _map.FactorY = tileSizePx / adjustedWorldHeight;
+            var fullSizePx = tileSizePx * (1 << maxZoom);
+            _adjustedWorldSize = Math.Max(fullSizePx * _map.SizeInMeters / fullWidthInitialPx, fullSizePx * _map.SizeInMeters / fullHeightInitialPx);
+            _map.FactorX = _map.FactorY = tileSizePx / _adjustedWorldSize;
 
             _fullImage?.Dispose();
             _fullImage = new Image<Rgba32>(fullSizePx, fullSizePx, new Rgba32(221, 221, 221));
@@ -166,40 +128,17 @@ namespace MapExportExtension
             _fullImage = new Image<Rgba32>(fullSizePx, fullSizePx, new Rgba32(221, 221, 221));
         }
 
-        public void HiResStart()
-        {
-            _isHiRes = true;
-            _fullImage?.Dispose();
-            _fullImage = null;
-        }
-
-        public void AerialStart()
-        {
-            _aerialFullImageRectified?.Dispose();
-            _aerialFullImageRectified = null;
-        }
-
         public void AerialCalibrate(double tileSizeM)
         {
-            _aerialTileSizeM = tileSizeM;
+            var aerialMaxZoom = GetAerialMaxZoom();
 
-            // Match hires
-            var hiresMinZoom = GetAerialMaxZoom();
-            var fullSizePx = _map.TileSize * (1 << hiresMinZoom);
+            var fullSizePx = _map.TileSize * (1 << aerialMaxZoom);
 
-            // Derive the adjusted world size in meters — same overflow as topo images.
-            // FactorX = TileSize / adjustedWorldWidth  →  adjustedWorldWidth = TileSize / FactorX
-            var adjustedWorldW = _map.TileSize / _map.FactorX;
-            var adjustedWorldH = _map.TileSize / _map.FactorY;
-            var adjustedWorldSize = Math.Max(adjustedWorldW, adjustedWorldH);
+            _aerial = new ScreenShotTileMetrics(tileSizeM, fullSizePx, _adjustedWorldSize);
 
-            var exactAerialTilePx = fullSizePx / (double)adjustedWorldSize * tileSizeM;
-
-            _aerialTilePx = (int)Math.Ceiling(exactAerialTilePx);
-
-            Extension.InfoMessage($"Aerial: tileSizeM={tileSizeM} adjustedWorldSize={adjustedWorldSize:F1} fullSizePx={fullSizePx} aerialTilePx={_aerialTilePx} (exact={exactAerialTilePx:F2})");
-            _aerialFullImageRectified?.Dispose();
-            _aerialFullImageRectified = new Image<Rgb24>(fullSizePx, fullSizePx, new Rgb24(0, 0, 0));
+            Extension.InfoMessage($"Aerial: {_aerial}");
+            _aerialFullImage?.Dispose();
+            _aerialFullImage = new Image<Rgb24>(fullSizePx, fullSizePx, new Rgb24(0, 0, 0));
         }
 
         private int GetAerialMaxZoom()
@@ -209,55 +148,28 @@ namespace MapExportExtension
 
         public void AerialScreenShot(int x, int y, double[] pA, double[] pB, double[] pC, double[] pD)
         {
-            if (_aerialFullImageRectified == null)
+            if (_aerialFullImage == null || _aerial == null || _armaScreen == null)
             {
+                Extension.ErrorMessage("Invalid state: AerialCalibrate or InitScreen was not called");
                 return;
             }
 
             // D -- B
             // |    |
             // A -- C
-            var pxA = ArmaToScreen(pA); // SW corner
-            var pxB = ArmaToScreen(pB); // NE corner
-            var pxC = ArmaToScreen(pC); // SE corner
-            var pxD = ArmaToScreen(pD); // NW corner
+            var pxA = _armaScreen.ArmaToScreen(pA); // SW corner
+            var pxB = _armaScreen.ArmaToScreen(pB); // NE corner
+            var pxC = _armaScreen.ArmaToScreen(pC); // SE corner
+            var pxD = _armaScreen.ArmaToScreen(pD); // NW corner
 
             AerialScreenShotRectified(x, y, pxA, pxB, pxC, pxD);
         }
 
-        private void AerialScreenShotBasic(int x, int y, Point pxA, Point pxB)
-        {
-            // Naive implementation without rectification, for testing and comparison purposes.
-            // Just crops the bounding box of the screen quad, without any perspective correction or sampling.
-
-            if (_aerialFullImageRectified == null)
-            {
-                return;
-            }
-
-            var cropLeft = Math.Min(pxA.X, pxB.X);
-            var cropTop = Math.Min(pxA.Y, pxB.Y);
-            var cropWidth = Math.Abs(pxB.X - pxA.X);
-            var cropHeight = Math.Abs(pxB.Y - pxA.Y);
-            var crop = new Rectangle(cropLeft, cropTop, cropWidth, cropHeight);
-
-            Extension.InfoMessage($"Aerial: X={x} Y={y} Crop={crop}");
-
-            using var raw = TakeScreenShot();
-            raw.Mutate(i => i.Crop(crop));
-
-            // Downsample to per-tile pixel size
-            raw.Mutate(i => i.Resize(_aerialTilePx, _aerialTilePx, KnownResamplers.Lanczos3));
-
-            // Composite into full aerial image
-            var point = new Point((int)(x / _aerialTileSizeM) * _aerialTilePx, _aerialFullImageRectified.Height - ((int)(y / _aerialTileSizeM) * _aerialTilePx) - _aerialTilePx);
-            _aerialFullImageRectified.Mutate(i => i.DrawImage(raw, point, 1f));
-        }
-
         private void AerialScreenShotRectified(int x, int y, Point pxA, Point pxB, Point pxC, Point pxD)
         {
-            if (_aerialFullImageRectified == null)
+            if (_aerialFullImage == null || _aerial == null || _armaScreen == null)
             {
+                Extension.ErrorMessage("Invalid state");
                 return;
             }
 
@@ -276,9 +188,9 @@ namespace MapExportExtension
             double cx = pxC.X - cropLeft, cy = pxC.Y - cropTop; // SE
             double dx = pxD.X - cropLeft, dy = pxD.Y - cropTop; // NW
 
-            var tilePx = _aerialTilePx;
+            var tilePx = _aerial.Pixel;
 
-            using var rawBase = TakeScreenShot();
+            using var rawBase = _armaScreen.TakeScreenShot();
             rawBase.Mutate(i => i.Crop(crop));
 
             // Copy source pixels for random-access sampling
@@ -319,16 +231,15 @@ namespace MapExportExtension
             });
 
             // Composite into full aerial image
-            var point = new Point((int)(x / _aerialTileSizeM) * _aerialTilePx,
-                                  _aerialFullImageRectified.Height - ((int)(y / _aerialTileSizeM) * _aerialTilePx) - _aerialTilePx);
-            _aerialFullImageRectified.Mutate(i => i.DrawImage(rectified, point, 1f));
+            var point = _aerial.GetTileTopLeft(x, y);
+            _aerialFullImage.Mutate(i => i.DrawImage(rectified, point, 1f));
         }
 
         public void AerialStop()
         {
-            if (_aerialFullImageRectified != null)
+            if (_aerialFullImage != null)
             {
-                _aerialFullImageRectified.SaveAsPng(Path.Combine(_dataPath, "aerial.png"));
+                _aerialFullImage.SaveAsPng(Path.Combine(_dataPath, "aerial.png"));
 
                 _aerialMap = new PackageIndex()
                 {
@@ -350,8 +261,8 @@ namespace MapExportExtension
                     AppendAttribution = _map.AppendAttribution
                 };
 
-                _aerialFullImageRectified.Dispose();
-                _aerialFullImageRectified = null;
+                _aerialFullImage.Dispose();
+                _aerialFullImage = null;
             }
         }
 
@@ -383,23 +294,41 @@ namespace MapExportExtension
 
         private int GetHiresZoom()
         {
+            // One zoom level above the base image, so that each tile is half the size of the base tiles (e.g. 1000m → 500m)
             return _map.Images[0].MaxZoom + 1;
         }
 
         public void ScreenShot(int x, int y, double[] pA, double[] pB)
         {
-            if (_fullImage == null)
+            if (_fullImage == null || _topo == null || _armaScreen == null)
             {
+                Extension.ErrorMessage("Invalid state: Calibrate or InitScreen was not called");
                 return;
             }
 
-            var pxA = ArmaToScreen(pA);
-            var pxB = ArmaToScreen(pB);
+            var pxA = _armaScreen.ArmaToScreen(pA);
+            var pxB = _armaScreen.ArmaToScreen(pB);
 
-            var crop = new Rectangle(pxA.X, pxB.Y, _oneWPx, _oneHPx);
-            var point = new Point((x / _oneW) * _oneWPx, _fullImage.Height - ((y / _oneH) * _oneHPx) - _oneHPx);
-            using var data = TakeScreenShot();
+            // Use actual screen coordinates for the crop to avoid rounding drift
+            var cropLeft = Math.Min(pxA.X, pxB.X);
+            var cropTop = Math.Min(pxA.Y, pxB.Y);
+            var cropWidth = Math.Abs(pxB.X - pxA.X);
+            var cropHeight = Math.Abs(pxB.Y - pxA.Y);
+            var crop = new Rectangle(cropLeft, cropTop, cropWidth, cropHeight);
+
+            var point = _topo.GetTileTopLeft(x, y);
+
+            using var data = _armaScreen.TakeScreenShot();
             data.Mutate(i => i.Crop(crop));
+
+            Extension.InfoMessage($"{TopoLayerName()}: X={x} Y={y} Crop={crop}");
+
+            // Resize to the calibrated tile size to correct any per-call pixel-level variation.
+            if (cropWidth != _topo.Pixel || cropHeight != _topo.Pixel)
+            {
+                data.Mutate(i => i.Resize(_topo.Pixel, _topo.Pixel, KnownResamplers.Lanczos3));
+            }
+
             _fullImage.Mutate(i => i.DrawImage(data, point, 1f));
         }
 
@@ -447,8 +376,8 @@ namespace MapExportExtension
         {
             _fullImage?.Dispose();
             _fullImage = null;
-            _aerialFullImageRectified?.Dispose();
-            _aerialFullImageRectified = null;
+            _aerialFullImage?.Dispose();
+            _aerialFullImage = null;
         }
 
         private void WriteIndexJson(string fileName, PackageIndex packageIndex)
@@ -515,25 +444,5 @@ namespace MapExportExtension
             return (v[0] / v[2], v[1] / v[2]);
         }
 
-        // ---
-
-        private Point ArmaToScreen(double[] point)
-        {
-            return new Point(
-                (int)Math.Floor((point[0] - _safeZoneX) * _screenW / _safeZoneW),
-                (int)Math.Ceiling((point[1] - _safeZoneY) * _screenH / _safeZoneH));
-        }
-
-        private Image TakeScreenShot()
-        {
-            using var bitmap = new System.Drawing.Bitmap(_screenW, _screenH);
-            using (var g = System.Drawing.Graphics.FromImage(bitmap))
-            {
-                g.CopyFromScreen(new System.Drawing.Point(_screenX, _screenY), System.Drawing.Point.Empty, new System.Drawing.Size(_screenW, _screenH));
-            }
-            using var ms = new MemoryStream();
-            bitmap.Save(ms, System.Drawing.Imaging.ImageFormat.Png);
-            return Image.Load(ms.ToArray());
-        }
     }
 }
