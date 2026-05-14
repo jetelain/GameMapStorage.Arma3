@@ -1,68 +1,71 @@
-using System.Net.Http.Headers;
-using System.Net.Http.Json;
-using System.Text.Json;
-using System.Text.Json.Serialization;
+using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Options;
+using Pmad.GameMapStorage.Client;
+using Pmad.GameMapStorage.Client.Models;
 
 namespace MapExportLauncher;
 
-// Note: Not yet implemented on GameMapStorage side
-
-public class GameMapStorageClient
+public class GameMapStorageClient : IDisposable
 {
     private readonly LauncherConfig _config;
+    private readonly HttpClient _httpAdmin;
+    private readonly HttpClient _httpPublic;
 
-    static readonly JsonSerializerOptions jsonSerializeOptions = new JsonSerializerOptions() { Converters = { new JsonStringEnumConverter() }, PropertyNameCaseInsensitive = true };
+    private readonly GameMapStorageAdminClient _clientAdmin;
+    private readonly Pmad.GameMapStorage.Client.GameMapStorageClient _clientPublic;
 
     public GameMapStorageClient(LauncherConfig config)
     {
         _config = config;
+        _httpAdmin = new HttpClient
+        {
+            BaseAddress = new Uri(_config.ApiUrl!.TrimEnd('/') + "/"),
+            Timeout = TimeSpan.FromMinutes(5) // large maps can take a while to upload
+        };
+        _httpPublic = new HttpClient
+        {
+            BaseAddress = new Uri(_config.ApiUrl!.TrimEnd('/') + "/")
+        };
+
+        _clientAdmin = new GameMapStorageAdminClient(_httpAdmin);
+        _clientPublic = new Pmad.GameMapStorage.Client.GameMapStorageClient(_httpPublic, new MemoryCache(Options.Create(new MemoryCacheOptions())));
     }
 
-    public async Task UploadAsync(string zipPath)
+    public void Dispose()
     {
-        using var http = new HttpClient();
-        http.BaseAddress = new Uri(_config.ApiUrl!.TrimEnd('/'));
-        http.Timeout = TimeSpan.FromMinutes(30); // large maps can take a while to process
+        _httpAdmin.Dispose();
+        _httpPublic.Dispose();
+    }
 
-        // ── Authenticate ──────────────────────────────────────────────────────
-        var tokenForm = new MultipartFormDataContent
-        {
-            { new StringContent(_config.ApiKeyId!.Value.ToString()), "apiKeyId" },
-            { new StringContent(_config.ApiKey!),                    "apiKey"   }
-        };
+    public async Task CreateLayerAsync(string zipPath)
+    {
+        await _clientAdmin.AuthenticateAsync(_config.ApiKeyId!.Value, _config.ApiKey!).ConfigureAwait(false);
 
-        var tokenResponse = await http.PostAsync("/api/v1/tokens", tokenForm);
-        if (!tokenResponse.IsSuccessStatusCode)
-        {
-            throw new InvalidOperationException(
-                $"Authentication failed ({(int)tokenResponse.StatusCode}). " +
-                "Check ApiKeyId and ApiKey in launcher-config.json.");
-        }
-
-        var token = (await tokenResponse.Content.ReadFromJsonAsync<AccessTokenResponse>(jsonSerializeOptions))?.AccessToken
-            ?? throw new InvalidOperationException("Bearer token response did not contain 'access_token'.");
-
-        http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
-
-        // ── Upload package ────────────────────────────────────────────────────
         await using var fileStream = File.OpenRead(zipPath);
-        var fileContent = new StreamContent(fileStream);
-        fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/zip");
-
-        var uploadForm = new MultipartFormDataContent
-        {
-            { fileContent, "package", Path.GetFileName(zipPath) }
-        };
 
         Console.WriteLine($"Uploading {Path.GetFileName(zipPath)} ({new FileInfo(zipPath).Length / 1024 / 1024} MB)...");
 
-        var uploadResponse = await http.PostAsync("/api/v1/layers", uploadForm);
+        await _clientAdmin.CreateLayerFromPackageAsync(fileStream, Path.GetFileName(zipPath)).ConfigureAwait(false);
+    }
 
-        if (!uploadResponse.IsSuccessStatusCode)
+    public async Task UpdateLayerAsync(int layerId, string zipPath)
+    {
+        await _clientAdmin.AuthenticateAsync(_config.ApiKeyId!.Value, _config.ApiKey!).ConfigureAwait(false);
+
+        await using var fileStream = File.OpenRead(zipPath);
+
+        Console.WriteLine($"Uploading {Path.GetFileName(zipPath)} ({new FileInfo(zipPath).Length / 1024 / 1024} MB)...");
+
+        await _clientAdmin.UpdateLayerFromPackageAsync(layerId, fileStream, Path.GetFileName(zipPath)).ConfigureAwait(false);
+    }
+
+    public async Task<GameMapLayerJson?> GetExistingLayerAsync(string name, LayerType layerType)
+    {
+        var map = await _clientPublic.GetMapAsync("arma3", name).ConfigureAwait(false);
+        if (map != null && map.Layers != null)
         {
-            var body = await uploadResponse.Content.ReadAsStringAsync();
-            throw new InvalidOperationException(
-                $"Upload failed ({(int)uploadResponse.StatusCode}): {body}");
+            return map.Layers.FirstOrDefault(l => l.Type == layerType);
         }
+        return null;
     }
 }

@@ -2,6 +2,7 @@ using System.IO.Compression;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 using Image = SixLabors.ImageSharp.Image;
@@ -53,10 +54,21 @@ namespace MapExportExtension
         private int _oneHPx;
         private bool _isHiRes;
 
-        public Image<Rgba32>? FullImage { get; private set; }
+        private PackageIndex? _aerialMap;
+        private Image<Rgb24>? _aerialFullImageRectified;
+        private double _aerialTileSizeM;
+        private int _aerialTilePx;
+
+        private Image<Rgba32>? _fullImage;
 
         public MapExportSession(string worldName, double worldSize, object?[]? cities, string title, double? offsetX, double? offsetY)
         {
+            Configuration.Default.MemoryAllocator = MemoryAllocator.Create(new MemoryAllocatorOptions()
+            {
+                MaximumPoolSizeMegabytes = 32_768,
+                AllocationLimitMegabytes = 16_384 // a 40x40km map at 1.5px/ms is ~12GB, so 16GB limit for safety (max for aerial images)
+            });
+
             _map = new PackageIndex()
             {
                 GameName = "arma3",
@@ -141,58 +153,242 @@ namespace MapExportExtension
             _map.FactorX = tileSizePx / adjustedWorldWidth;
             _map.FactorY = tileSizePx / adjustedWorldHeight;
 
-            WriteIndexJson();
-
-            FullImage?.Dispose();
-            FullImage = new Image<Rgba32>(fullSizePx, fullSizePx, new Rgba32(221, 221, 221));
+            _fullImage?.Dispose();
+            _fullImage = new Image<Rgba32>(fullSizePx, fullSizePx, new Rgba32(221, 221, 221));
         }
 
         private void CalibrateHiRes()
         {
-            var hiresMinZoom = _map.Images[0].MaxZoom + 1;
+            var hiresMinZoom = GetHiresZoom();
             var fullSizePx = _map.TileSize * (1 << hiresMinZoom);
 
-            FullImage?.Dispose();
-            FullImage = new Image<Rgba32>(fullSizePx, fullSizePx, new Rgba32(221, 221, 221));
+            _fullImage?.Dispose();
+            _fullImage = new Image<Rgba32>(fullSizePx, fullSizePx, new Rgba32(221, 221, 221));
         }
 
         public void HiResStart()
         {
             _isHiRes = true;
-            FullImage?.Dispose();
-            FullImage = null;
+            _fullImage?.Dispose();
+            _fullImage = null;
+        }
+
+        public void AerialStart()
+        {
+            _aerialFullImageRectified?.Dispose();
+            _aerialFullImageRectified = null;
+        }
+
+        public void AerialCalibrate(double tileSizeM)
+        {
+            _aerialTileSizeM = tileSizeM;
+
+            // Match hires
+            var hiresMinZoom = GetAerialMaxZoom();
+            var fullSizePx = _map.TileSize * (1 << hiresMinZoom);
+
+            // Derive the adjusted world size in meters — same overflow as topo images.
+            // FactorX = TileSize / adjustedWorldWidth  →  adjustedWorldWidth = TileSize / FactorX
+            var adjustedWorldW = _map.TileSize / _map.FactorX;
+            var adjustedWorldH = _map.TileSize / _map.FactorY;
+            var adjustedWorldSize = Math.Max(adjustedWorldW, adjustedWorldH);
+
+            var exactAerialTilePx = fullSizePx / (double)adjustedWorldSize * tileSizeM;
+
+            _aerialTilePx = (int)Math.Ceiling(exactAerialTilePx);
+
+            Extension.InfoMessage($"Aerial: tileSizeM={tileSizeM} adjustedWorldSize={adjustedWorldSize:F1} fullSizePx={fullSizePx} aerialTilePx={_aerialTilePx} (exact={exactAerialTilePx:F2})");
+            _aerialFullImageRectified?.Dispose();
+            _aerialFullImageRectified = new Image<Rgb24>(fullSizePx, fullSizePx, new Rgb24(0, 0, 0));
+        }
+
+        private int GetAerialMaxZoom()
+        {
+            return _map.Images[0].MaxZoom + 2;
+        }
+
+        public void AerialScreenShot(int x, int y, double[] pA, double[] pB, double[] pC, double[] pD)
+        {
+            if (_aerialFullImageRectified == null)
+            {
+                return;
+            }
+
+            // D -- B
+            // |    |
+            // A -- C
+            var pxA = ArmaToScreen(pA); // SW corner
+            var pxB = ArmaToScreen(pB); // NE corner
+            var pxC = ArmaToScreen(pC); // SE corner
+            var pxD = ArmaToScreen(pD); // NW corner
+
+            AerialScreenShotRectified(x, y, pxA, pxB, pxC, pxD);
+        }
+
+        private void AerialScreenShotBasic(int x, int y, Point pxA, Point pxB)
+        {
+            // Naive implementation without rectification, for testing and comparison purposes.
+            // Just crops the bounding box of the screen quad, without any perspective correction or sampling.
+
+            if (_aerialFullImageRectified == null)
+            {
+                return;
+            }
+
+            var cropLeft = Math.Min(pxA.X, pxB.X);
+            var cropTop = Math.Min(pxA.Y, pxB.Y);
+            var cropWidth = Math.Abs(pxB.X - pxA.X);
+            var cropHeight = Math.Abs(pxB.Y - pxA.Y);
+            var crop = new Rectangle(cropLeft, cropTop, cropWidth, cropHeight);
+
+            Extension.InfoMessage($"Aerial: X={x} Y={y} Crop={crop}");
+
+            using var raw = TakeScreenShot();
+            raw.Mutate(i => i.Crop(crop));
+
+            // Downsample to per-tile pixel size
+            raw.Mutate(i => i.Resize(_aerialTilePx, _aerialTilePx, KnownResamplers.Lanczos3));
+
+            // Composite into full aerial image
+            var point = new Point((int)(x / _aerialTileSizeM) * _aerialTilePx, _aerialFullImageRectified.Height - ((int)(y / _aerialTileSizeM) * _aerialTilePx) - _aerialTilePx);
+            _aerialFullImageRectified.Mutate(i => i.DrawImage(raw, point, 1f));
+        }
+
+        private void AerialScreenShotRectified(int x, int y, Point pxA, Point pxB, Point pxC, Point pxD)
+        {
+            if (_aerialFullImageRectified == null)
+            {
+                return;
+            }
+
+            // Bounding box of the screen quad for cropping
+            var cropLeft = Math.Min(Math.Min(pxA.X, pxB.X), Math.Min(pxC.X, pxD.X));
+            var cropTop = Math.Min(Math.Min(pxA.Y, pxB.Y), Math.Min(pxC.Y, pxD.Y));
+            var cropRight = Math.Max(Math.Max(pxA.X, pxB.X), Math.Max(pxC.X, pxD.X));
+            var cropBottom = Math.Max(Math.Max(pxA.Y, pxB.Y), Math.Max(pxC.Y, pxD.Y));
+            var crop = new Rectangle(cropLeft, cropTop, cropRight - cropLeft, cropBottom - cropTop);
+
+            Extension.InfoMessage($"Aerial: X={x} Y={y} Crop={crop}");
+
+            // Quad corners expressed relative to the cropped region
+            double ax = pxA.X - cropLeft, ay = pxA.Y - cropTop; // SW
+            double bx = pxB.X - cropLeft, by = pxB.Y - cropTop; // NE
+            double cx = pxC.X - cropLeft, cy = pxC.Y - cropTop; // SE
+            double dx = pxD.X - cropLeft, dy = pxD.Y - cropTop; // NW
+
+            var tilePx = _aerialTilePx;
+
+            using var rawBase = TakeScreenShot();
+            rawBase.Mutate(i => i.Crop(crop));
+
+            // Copy source pixels for random-access sampling
+            var raw = (Image<Rgba32>)rawBase;
+            var srcPixels = new Rgba32[raw.Width * raw.Height];
+            raw.CopyPixelDataTo(srcPixels);
+            var srcWidth = raw.Width;
+            var srcHeight = raw.Height;
+
+            // Inverse homography: output rectangle → source quad (for per-pixel inverse mapping)
+            //   (0,0)             → D (NW)
+            //   (tilePx, 0)       → B (NE)
+            //   (0,      tilePx)  → A (SW)
+            //   (tilePx, tilePx)  → C (SE)
+            var hInv = ComputeHomography(
+                0, 0, dx, dy,
+                tilePx, 0, bx, by,
+                0, tilePx, ax, ay,
+                tilePx, tilePx, cx, cy);
+
+            using var rectified = new Image<Rgba32>(tilePx, tilePx);
+            rectified.ProcessPixelRows(accessor =>
+            {
+                for (int oy = 0; oy < tilePx; oy++)
+                {
+                    var row = accessor.GetRowSpan(oy);
+                    for (int ox = 0; ox < tilePx; ox++)
+                    {
+                        var (sx, sy) = ProjectPoint(hInv, ox, oy);
+                        var ix = (int)Math.Round(sx);
+                        var iy = (int)Math.Round(sy);
+                        if ((uint)ix < (uint)srcWidth && (uint)iy < (uint)srcHeight)
+                        {
+                            row[ox] = srcPixels[iy * srcWidth + ix];
+                        }
+                    }
+                }
+            });
+
+            // Composite into full aerial image
+            var point = new Point((int)(x / _aerialTileSizeM) * _aerialTilePx,
+                                  _aerialFullImageRectified.Height - ((int)(y / _aerialTileSizeM) * _aerialTilePx) - _aerialTilePx);
+            _aerialFullImageRectified.Mutate(i => i.DrawImage(rectified, point, 1f));
+        }
+
+        public void AerialStop()
+        {
+            if (_aerialFullImageRectified != null)
+            {
+                _aerialFullImageRectified.SaveAsPng(Path.Combine(_dataPath, "aerial.png"));
+
+                _aerialMap = new PackageIndex()
+                {
+                    GameName = _map.GameName,
+                    SizeInMeters = _map.SizeInMeters,
+                    MapName = _map.MapName,
+                    EnglishTitle = _map.EnglishTitle,
+                    Locations = _map.Locations,
+                    Images = [new PackageImage(0, GetAerialMaxZoom(), "aerial.png")],
+                    Culture = _map.Culture,
+                    OriginX = _map.OriginX,
+                    OriginY = _map.OriginY,
+                    FactorX = _map.FactorX,
+                    FactorY = _map.FactorY,
+                    DefaultZoom = _map.DefaultZoom,
+                    TileSize = _map.TileSize,
+                    Type = 2, // Aerial
+                    SteamWorkshopId = _map.SteamWorkshopId,
+                    AppendAttribution = _map.AppendAttribution
+                };
+
+                _aerialFullImageRectified.Dispose();
+                _aerialFullImageRectified = null;
+            }
         }
 
         public void Stop()
         {
-            if (FullImage != null)
+            if (_fullImage != null)
             {
-                FullImage.SaveAsPng(Path.Combine(_dataPath, "base.png"));
-                FullImage.Dispose();
-                FullImage = null;
+                _fullImage.SaveAsPng(Path.Combine(_dataPath, "base.png"));
+                _fullImage.Dispose();
+                _fullImage = null;
             }
         }
 
         public void HiResStop()
         {
-            if (FullImage != null)
+            if (_fullImage != null)
             {
-                FullImage.SaveAsPng(Path.Combine(_dataPath, "hires.png"));
-                FullImage.Dispose();
-                FullImage = null;
+                _fullImage.SaveAsPng(Path.Combine(_dataPath, "hires.png"));
+                _fullImage.Dispose();
+                _fullImage = null;
 
                 if (!_map.Images.Any(i => i.FileName == "hires.png"))
                 {
-                    var hiresMinZoom = _map.Images[0].MaxZoom + 1;
+                    var hiresMinZoom = GetHiresZoom();
                     _map.Images = [.. _map.Images, new PackageImage(hiresMinZoom, hiresMinZoom, "hires.png")];
-                    WriteIndexJson();
                 }
             }
         }
 
+        private int GetHiresZoom()
+        {
+            return _map.Images[0].MaxZoom + 1;
+        }
+
         public void ScreenShot(int x, int y, double[] pA, double[] pB)
         {
-            if (FullImage == null)
+            if (_fullImage == null)
             {
                 return;
             }
@@ -201,49 +397,125 @@ namespace MapExportExtension
             var pxB = ArmaToScreen(pB);
 
             var crop = new Rectangle(pxA.X, pxB.Y, _oneWPx, _oneHPx);
-            var point = new Point((x / _oneW) * _oneWPx, FullImage.Height - ((y / _oneH) * _oneHPx) - _oneHPx);
+            var point = new Point((x / _oneW) * _oneWPx, _fullImage.Height - ((y / _oneH) * _oneHPx) - _oneHPx);
             using var data = TakeScreenShot();
             data.Mutate(i => i.Crop(crop));
-            FullImage.Mutate(i => i.DrawImage(data, point, 1f));
+            _fullImage.Mutate(i => i.DrawImage(data, point, 1f));
         }
 
         public void Pack()
         {
             Task.Run(() =>
             {
-                try
+                GeneratePackage(_map, "index.json", _map.MapName + ".zip");
+
+                if (_aerialMap != null)
                 {
-                    var zipPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Arma3MapExporter", "maps", _map.MapName + ".zip");
-                    if (File.Exists(zipPath))
-                    {
-                        File.Delete(zipPath);
-                    }
-                    using var zip = ZipFile.Open(zipPath, ZipArchiveMode.Create);
-                    zip.CreateEntryFromFile(Path.Combine(_dataPath, "index.json"), "index.json");
-                    foreach (var img in _map.Images)
-                    {
-                        zip.CreateEntryFromFile(Path.Combine(_dataPath, img.FileName), img.FileName);
-                    }
+                    GeneratePackage(_aerialMap, "index_aerial.json", _aerialMap.MapName + "_aerial.zip");
                 }
-                catch (Exception ex)
-                {
-                    Extension.ErrorMessage($"Unable to generate archive: {ex.Message}");
-                }
+
                 Extension.Callback("Complete", _map.MapName);
             });
         }
 
-        public void Dispose()
+        private void GeneratePackage(PackageIndex pack, string indexFileName, string packageFileName)
         {
-            FullImage?.Dispose();
-            FullImage = null;
+            try
+            {
+                var zipPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Arma3MapExporter", "maps", packageFileName);
+                if (File.Exists(zipPath))
+                {
+                    File.Delete(zipPath);
+                }
+                using var zip = ZipFile.Open(zipPath, ZipArchiveMode.Create);
+
+                WriteIndexJson(indexFileName, pack);
+                zip.CreateEntryFromFile(Path.Combine(_dataPath, indexFileName), "index.json");
+
+                foreach (var img in pack.Images)
+                {
+                    zip.CreateEntryFromFile(Path.Combine(_dataPath, img.FileName), img.FileName);
+                }
+            }
+            catch (Exception ex)
+            {
+                Extension.ErrorMessage($"Unable to generate archive: {ex.Message}");
+            }
         }
 
-        private void WriteIndexJson()
+        public void Dispose()
         {
-            var json = JsonSerializer.Serialize(_map, PackageIndexContext.Default.PackageIndex);
-            File.WriteAllText(Path.Combine(_dataPath, "index.json"), json);
+            _fullImage?.Dispose();
+            _fullImage = null;
+            _aerialFullImageRectified?.Dispose();
+            _aerialFullImageRectified = null;
         }
+
+        private void WriteIndexJson(string fileName, PackageIndex packageIndex)
+        {
+            var json = JsonSerializer.Serialize(packageIndex, PackageIndexContext.Default.PackageIndex);
+            File.WriteAllText(Path.Combine(_dataPath, fileName), json);
+        }
+
+        // --- Projective / homography helpers  ---
+
+        private static double[] BasisToPoints(double x1, double y1, double x2, double y2, double x3, double y3, double x4, double y4)
+        {
+            double[] m = [x1, x2, x3, y1, y2, y3, 1, 1, 1];
+            double[] v = MultMV(Adj(m), [x4, y4, 1]);
+            return MultMM(m, [v[0], 0, 0,  0, v[1], 0,  0, 0, v[2]]);
+        }
+
+        private static double[] Adj(double[] m) =>
+        [
+            m[4]*m[8]-m[5]*m[7], m[2]*m[7]-m[1]*m[8], m[1]*m[5]-m[2]*m[4],
+            m[5]*m[6]-m[3]*m[8], m[0]*m[8]-m[2]*m[6], m[2]*m[3]-m[0]*m[5],
+            m[3]*m[7]-m[4]*m[6], m[1]*m[6]-m[0]*m[7], m[0]*m[4]-m[1]*m[3]
+        ];
+
+        private static double[] MultMM(double[] a, double[] b)
+        {
+            var c = new double[9];
+            for (int i = 0; i < 3; i++)
+                for (int j = 0; j < 3; j++)
+                {
+                    double cij = 0;
+                    for (int k = 0; k < 3; k++)
+                        cij += a[3 * i + k] * b[3 * k + j];
+                    c[3 * i + j] = cij;
+                }
+            return c;
+        }
+
+        private static double[] MultMV(double[] m, double[] v) =>
+        [
+            m[0]*v[0] + m[1]*v[1] + m[2]*v[2],
+            m[3]*v[0] + m[4]*v[1] + m[5]*v[2],
+            m[6]*v[0] + m[7]*v[1] + m[8]*v[2]
+        ];
+
+        // Compute the 3×3 homography matrix mapping (x1s,y1s)→(x1d,y1d) .. (x4s,y4s)→(x4d,y4d)
+        private static double[] ComputeHomography(
+            double x1s, double y1s, double x1d, double y1d,
+            double x2s, double y2s, double x2d, double y2d,
+            double x3s, double y3s, double x3d, double y3d,
+            double x4s, double y4s, double x4d, double y4d)
+        {
+            var s = BasisToPoints(x1s, y1s, x2s, y2s, x3s, y3s, x4s, y4s);
+            var d = BasisToPoints(x1d, y1d, x2d, y2d, x3d, y3d, x4d, y4d);
+            var m = MultMM(d, Adj(s));
+            var scale = 1.0 / m[8];
+            for (int i = 0; i < 9; i++) m[i] *= scale;
+            return m;
+        }
+
+        private static (double x, double y) ProjectPoint(double[] m, double x, double y)
+        {
+            var v = MultMV(m, [x, y, 1]);
+            return (v[0] / v[2], v[1] / v[2]);
+        }
+
+        // ---
 
         private Point ArmaToScreen(double[] point)
         {

@@ -14,5 +14,6 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\extern\bis-file-formats\BIS.PBO\BIS.PBO.csproj" />
+		<PackageReference Include="Pmad.GameMapStorage.Client" Version="0.1.1" />
 	</ItemGroup>
 </Project>

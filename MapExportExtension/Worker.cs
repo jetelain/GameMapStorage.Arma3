@@ -44,6 +44,24 @@ namespace MapExportExtension
                 case "histop":
                     _session?.HiResStop();
                     return;
+                case "aerialstart":
+                    _session?.AerialStart();
+                    return;
+                case "aerialcalibrate":
+                    _session?.AerialCalibrate(double.Parse(args[0], CultureInfo.InvariantCulture));
+                    return;
+                case "aerialscreenshot":
+                    _session?.AerialScreenShot(
+                        int.Parse(args[0]),
+                        int.Parse(args[1]),
+                        ArmaSerializer.ParseDoubleArray(args[2]),
+                        ArmaSerializer.ParseDoubleArray(args[3]),
+                        ArmaSerializer.ParseDoubleArray(args[4]),
+                        ArmaSerializer.ParseDoubleArray(args[5]));
+                    return;
+                case "aerialstop":
+                    _session?.AerialStop();
+                    return;
                 case "dispose":
                     if (_session != null)
                     {

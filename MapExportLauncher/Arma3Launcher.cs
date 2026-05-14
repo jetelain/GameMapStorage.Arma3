@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.Versioning;
 using Microsoft.Win32;
+using Pmad.GameMapStorage.Client.Models;
 
 namespace MapExportLauncher;
 
@@ -24,7 +25,7 @@ public class Arma3Launcher
             "Arma3MapExporter", "launcher-workspace");
     }
 
-    public async Task<string?> RunAsync()
+    public async Task<List<(LayerType,string)>> RunAsync()
     {
         SetupWorkspace();
 
@@ -53,11 +54,26 @@ public class Arma3Launcher
 
         Console.WriteLine($"Arma 3 exited with code {process.ExitCode}.");
 
-        var zipPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            "Arma3MapExporter", "maps", _worldName.ToLowerInvariant() + ".zip");
 
-        return File.Exists(zipPath) ? zipPath : null;
+        var result = new List<(LayerType, string)>();
+
+        Add(result, Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            "Arma3MapExporter", "maps", _worldName.ToLowerInvariant() + ".zip"), LayerType.Topographic);
+
+        Add(result, Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            "Arma3MapExporter", "maps", _worldName.ToLowerInvariant() + "_aerial.zip"), LayerType.Aerial);
+
+        return result;
+    }
+
+    private static void Add(List<(LayerType, string)> result, string filePath, LayerType layerType)
+    {
+        if (File.Exists(filePath))
+        {
+            result.Add((layerType, filePath));
+        }
     }
 
     // ── Workspace setup ───────────────────────────────────────────────────────
@@ -170,7 +186,7 @@ public class Arma3Launcher
                     while ((line = await reader.ReadLineAsync(ct)) != null)
                     {
                         // Only forward Arma log lines that are relevant to the exporter
-                        if (line.Contains("a3me") || line.Contains("MapExport") || line.Contains("Error"))
+                        if (line.Contains("a3me", StringComparison.OrdinalIgnoreCase) || line.Contains("Error", StringComparison.OrdinalIgnoreCase))
                         {
                             Console.WriteLine($"[RPT] {line}");
                         }

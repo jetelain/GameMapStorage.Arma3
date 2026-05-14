@@ -1,5 +1,6 @@
 using System.Text.Json;
 using MapExportLauncher;
+using Pmad.GameMapStorage.Client.Models;
 
 // ── Argument parsing ──────────────────────────────────────────────────────────
 string? worldName = null;
@@ -67,6 +68,8 @@ else
     Console.WriteLine($"No config found at {configPath}, using defaults.");
     Console.WriteLine("Create this file to configure API upload credentials and mod paths.");
 }
+
+using var gmsClient = new GameMapStorageClient(config);
 
 // ── Determine the list of worlds to export ────────────────────────────────────
 List<PboWorldDiscovery.DiscoveredWorld> worldsToExport;
@@ -162,10 +165,10 @@ foreach (var world in worldsToExport)
 
     var launcher = new Arma3Launcher(config, world.WorldName, workshopMods, extraEnv);
 
-    string? zipPath;
+    List<(LayerType, string)> zipPaths;
     try
     {
-        zipPath = await launcher.RunAsync();
+        zipPaths = await launcher.RunAsync();
     }
     catch (Exception ex)
     {
@@ -174,15 +177,18 @@ foreach (var world in worldsToExport)
         continue;
     }
 
-    if (zipPath == null)
+    if (zipPaths.Count == 0)
     {
-        Console.Error.WriteLine($"Export for {world.WorldName} did not produce a zip file. Check Arma 3 logs.");
+        Console.Error.WriteLine($"Export for {world.WorldName} did not produce any zip files. Check Arma 3 logs.");
         overallResult = 3;
         continue;
     }
 
-    Console.WriteLine($"Export complete: {zipPath}");
-
+    foreach (var (layerType, zipPath) in zipPaths)
+    {
+        Console.WriteLine($"Export complete ({layerType}): {zipPath}");
+    }
+        
     // ── Upload ────────────────────────────────────────────────────────────────
     if (doUpload)
     {
@@ -193,17 +199,31 @@ foreach (var world in worldsToExport)
             return 4;
         }
 
-        Console.WriteLine($"Uploading {world.WorldName} to {config.ApiUrl} ...");
-        try
+        foreach (var (layerType, zipPath) in zipPaths)
         {
-            var client = new GameMapStorageClient(config);
-            await client.UploadAsync(zipPath);
-            Console.WriteLine($"Upload of {world.WorldName} complete.");
-        }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine($"Upload of {world.WorldName} failed: {ex.Message}");
-            overallResult = 5;
+            Console.WriteLine($"Uploading {world.WorldName} ({layerType}) to {config.ApiUrl} ...");
+            try
+            {
+                var existing = await gmsClient.GetExistingLayerAsync(world.WorldName, layerType);
+
+                if (existing != null)
+                {
+                    Console.WriteLine($"Existing layer found with ID {existing.GameMapLayerId}, updating it...");
+                    await gmsClient.UpdateLayerAsync(existing.GameMapLayerId, zipPath);
+                }
+                else
+                {
+                    Console.WriteLine("No existing layer found, creating a new one...");
+                    await gmsClient.CreateLayerAsync(zipPath);
+                }
+
+                Console.WriteLine($"Upload of {world.WorldName} ({layerType}) complete.");
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"Upload of {world.WorldName} ({layerType}) failed: {ex.Message}");
+                overallResult = 5;
+            }
         }
     }
 }
