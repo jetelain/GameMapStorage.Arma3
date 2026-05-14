@@ -220,11 +220,29 @@ namespace MapExportExtension
                     for (int ox = 0; ox < tilePx; ox++)
                     {
                         var (sx, sy) = ProjectPoint(hInv, ox, oy);
-                        var ix = (int)Math.Round(sx);
-                        var iy = (int)Math.Round(sy);
-                        if ((uint)ix < (uint)srcWidth && (uint)iy < (uint)srcHeight)
+                        var x0 = (int)Math.Floor(sx);
+                        var y0 = (int)Math.Floor(sy);
+                        var x1 = x0 + 1;
+                        var y1 = y0 + 1;
+                        if (x0 >= 0 && y0 >= 0 && x1 < srcWidth && y1 < srcHeight)
                         {
-                            row[ox] = srcPixels[iy * srcWidth + ix];
+                            var fx = sx - x0;
+                            var fy = sy - y0;
+                            var c00 = srcPixels[y0 * srcWidth + x0];
+                            var c10 = srcPixels[y0 * srcWidth + x1];
+                            var c01 = srcPixels[y1 * srcWidth + x0];
+                            var c11 = srcPixels[y1 * srcWidth + x1];
+                            row[ox] = new Rgba32(
+                                (byte)(c00.R * (1 - fx) * (1 - fy) + c10.R * fx * (1 - fy) + c01.R * (1 - fx) * fy + c11.R * fx * fy),
+                                (byte)(c00.G * (1 - fx) * (1 - fy) + c10.G * fx * (1 - fy) + c01.G * (1 - fx) * fy + c11.G * fx * fy),
+                                (byte)(c00.B * (1 - fx) * (1 - fy) + c10.B * fx * (1 - fy) + c01.B * (1 - fx) * fy + c11.B * fx * fy),
+                                (byte)(c00.A * (1 - fx) * (1 - fy) + c10.A * fx * (1 - fy) + c01.A * (1 - fx) * fy + c11.A * fx * fy)
+                            );
+                        }
+                        else if ((uint)x0 < (uint)srcWidth && (uint)y0 < (uint)srcHeight)
+                        {
+                            // Near the border: fall back to nearest-neighbor
+                            row[ox] = srcPixels[y0 * srcWidth + x0];
                         }
                     }
                 }
