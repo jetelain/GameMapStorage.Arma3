@@ -5,7 +5,7 @@ INFO("Calibrate Aerial");
 // _this = [_zoom, _deltaX, _deltaY, _h, _w] — same layout as fnc_screenShotLoop
 params ["_zoom", "_deltaX", "_deltaY", "_h", "_w"];
 
-// Derive hires tile size in meters: _h is the topo tile height in meters (usualy 1000)
+// Derive hires tile size in meters: _h is the topo tile height in meters (usually 1000)
 private _tileSizeM = _h / 4;
 
 // Force noon for consistent lighting
