@@ -24,15 +24,17 @@ namespace MapExportExtension
         private double _adjustedWorldSize;
         private ArmaScreen? _armaScreen;
 
-
-        public MapExportSession(string worldName, double worldSize, object?[]? cities, string title, double? offsetX, double? offsetY)
+        static MapExportSession()
         {
             Configuration.Default.MemoryAllocator = MemoryAllocator.Create(new MemoryAllocatorOptions()
             {
                 MaximumPoolSizeMegabytes = 32_768,
                 AllocationLimitMegabytes = 16_384 // a 40x40km map at 1.5px/ms is ~12GB, so 16GB limit for safety (max for aerial images)
             });
+        }
 
+        public MapExportSession(string worldName, double worldSize, object?[]? cities, string title, double? offsetX, double? offsetY)
+        {
             _adjustedWorldSize = worldSize;
 
             _map = new PackageIndex()
