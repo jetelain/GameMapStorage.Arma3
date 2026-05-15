@@ -24,7 +24,7 @@ sleep 0.5;
 private _posA = _control ctrlMapWorldToScreen [0,0];
 private _posB = _control ctrlMapWorldToScreen [_w,_h];
 
-INFO_2("Initial: zoom=%1 dx=%2", _zoom, (_posB select 0) - (_posA select 0));
+INFO_2("Initial: zoom=%1 dx=%2",_zoom,(_posB select 0) - (_posA select 0));
 
 _zoom = ((_posB select 0) - (_posA select 0)) / 0.5 * _zoom;
 
@@ -35,7 +35,7 @@ sleep 0.5;
 _posA = _control ctrlMapWorldToScreen [0,0];
 _posB = _control ctrlMapWorldToScreen [_w,_h];
 
-INFO_2("Final: zoom=%1 dx=%2", _zoom, (_posB select 0) - (_posA select 0));
+INFO_2("Final: zoom=%1 dx=%2",_zoom,(_posB select 0) - (_posA select 0));
 
 private _args = [
 	_posA,

@@ -1,7 +1,7 @@
 private _lightingNewConfig = configFile/"cfgWorlds"/worldName/"Weather"/"LightingNew";
 private _latitude = -1 * getNumber (configFile/"CfgWorlds"/worldName/"latitude");
 private _day = 360 * (dateToNumber date);
-private _hour = (daytime/24) * 360;
+private _hour = (dayTime/24) * 360;
 private _currentSunAngle = ((12 * (cos _day) - 78) * (cos _latitude) * (cos _hour)) - (24 * (sin _latitude) * (cos _day));
 
 private _candidateLightingNewClass = configNull;
@@ -33,8 +33,6 @@ for "_i" from (0) to ((count _lightingNewConfig) - 1) do
 				&& ((isNull _candidateLightingNewClass) || 
 				    {(_sunAngle <= _candidateSunAngle) && (_overcast <= _candidateOvercast)})) then {
 					
-				diag_log ["OK", _lightingNewClass ];
-
 				_candidateLightingNewClass = _lightingNewClass;
 				_candidateOvercast = _overcast;
 				_candidateSunAngle = _sunAngle;
@@ -43,4 +41,26 @@ for "_i" from (0) to ((count _lightingNewConfig) - 1) do
 		};
 	};
 };
+
+if ( isNull _candidateLightingNewClass ) then 
+{
+	// Otherwise just pick the one with the highest apertureStandard, which should be the brightest one	
+	private _candidateApertureStandard = 0;
+	for "_i" from (0) to ((count _lightingNewConfig) - 1) do
+	{
+		private _lightingNewClass = _lightingNewConfig select _i;
+		if (isClass _lightingNewClass) then
+		{
+			private _apertureStandard   = getNumber (_lightingNewClass/"apertureStandard");
+			
+			if ( _apertureStandard > _candidateApertureStandard ) then {
+				_candidateApertureStandard = _apertureStandard;
+				_candidateLightingNewClass = _lightingNewClass;
+			};
+		};
+	};
+};
+
+
+
 _candidateLightingNewClass

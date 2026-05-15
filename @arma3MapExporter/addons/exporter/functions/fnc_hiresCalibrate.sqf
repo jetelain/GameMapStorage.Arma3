@@ -19,7 +19,7 @@ sleep 0.5;
 private _posA = _control ctrlMapWorldToScreen [0,0];
 private _posB = _control ctrlMapWorldToScreen [_w,_h];
 
-INFO_2("Initial: zoom=%1 dx=%2", _zoom, (_posB select 0) - (_posA select 0));
+INFO_2("Initial: zoom=%1 dx=%2",_zoom,(_posB select 0) - (_posA select 0));
 
 _control ctrlMapAnimAdd [0, _zoom, [_deltaX,_deltaY]];
 ctrlMapAnimCommit _control;
@@ -28,7 +28,7 @@ sleep 0.5;
 _posA = _control ctrlMapWorldToScreen [0,0];
 _posB = _control ctrlMapWorldToScreen [_w,_h];
 
-INFO_2("Final: zoom=%1 dx=%2", _zoom, (_posB select 0) - (_posA select 0));
+INFO_2("Final: zoom=%1 dx=%2",_zoom,(_posB select 0) - (_posA select 0));
 
 private _args = [
 	_posA,
@@ -36,7 +36,7 @@ private _args = [
 	_h
 ];
 
-INFO_2("re-calibrate(%1) %2",_args,_dbg);
+INFO_2("hicalibrate(%1) %2",_args,_dbg);
 "mapExportExtension" callExtension ["hicalibrate", _args];
 
 [_zoom, _deltaX, _deltaY, _h, _w]

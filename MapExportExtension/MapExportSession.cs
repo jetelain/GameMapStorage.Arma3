@@ -24,6 +24,9 @@ namespace MapExportExtension
         private double _adjustedWorldSize;
         private ArmaScreen? _armaScreen;
 
+        private readonly List<Task> _saveImageTasks = new List<Task>();
+        private readonly SemaphoreSlim _semaphore = new SemaphoreSlim(1, 1);
+
         static MapExportSession()
         {
             Configuration.Default.MemoryAllocator = MemoryAllocator.Create(new MemoryAllocatorOptions()
@@ -259,7 +262,8 @@ namespace MapExportExtension
         {
             if (_aerialFullImage != null)
             {
-                _aerialFullImage.SaveAsPng(Path.Combine(_dataPath, "aerial.png"));
+                SavePngAndDisposeBackground(_aerialFullImage, Path.Combine(_dataPath, "aerial.png"));
+                _aerialFullImage = null;
 
                 _aerialMap = new PackageIndex()
                 {
@@ -280,9 +284,6 @@ namespace MapExportExtension
                     SteamWorkshopId = _map.SteamWorkshopId,
                     AppendAttribution = _map.AppendAttribution
                 };
-
-                _aerialFullImage.Dispose();
-                _aerialFullImage = null;
             }
         }
 
@@ -290,8 +291,7 @@ namespace MapExportExtension
         {
             if (_fullImage != null)
             {
-                _fullImage.SaveAsPng(Path.Combine(_dataPath, "base.png"));
-                _fullImage.Dispose();
+                SavePngAndDisposeBackground(_fullImage, Path.Combine(_dataPath, "base.png"));
                 _fullImage = null;
             }
         }
@@ -300,8 +300,7 @@ namespace MapExportExtension
         {
             if (_fullImage != null)
             {
-                _fullImage.SaveAsPng(Path.Combine(_dataPath, "hires.png"));
-                _fullImage.Dispose();
+                SavePngAndDisposeBackground(_fullImage, Path.Combine(_dataPath, "hires.png"));
                 _fullImage = null;
 
                 if (!_map.Images.Any(i => i.FileName == "hires.png"))
@@ -354,8 +353,23 @@ namespace MapExportExtension
 
         public void Pack()
         {
-            Task.Run(() =>
+            Task.Run(async () =>
             {
+                await _semaphore.WaitAsync().ConfigureAwait(false); // Protect against concurrent access to _saveImageTasks list
+                try
+                {
+                    await Task.WhenAll(_saveImageTasks).ConfigureAwait(false); // Wait for all PNG to be saved before generating the package
+                }
+                catch(Exception ex)
+                {
+                    Extension.ErrorMessage($"Error while saving images: {ex.Message}");
+                    return;
+                }
+                finally
+                {
+                    _semaphore.Release();
+                }
+
                 GeneratePackage(_map, "index.json", _map.MapName + ".zip");
 
                 if (_aerialMap != null)
@@ -365,6 +379,30 @@ namespace MapExportExtension
 
                 Extension.Callback("Complete", _map.MapName);
             });
+        }
+
+        private void SavePngAndDisposeBackground(Image image, string fileName)
+        {
+            _semaphore.Wait(); // Protect against concurrent access to _saveImageTasks list
+            try
+            {
+                _saveImageTasks.Add(Task.Run(() =>
+                {
+                    try
+                    {
+                        image.SaveAsPng(Path.Combine(_dataPath, fileName));
+                        image.Dispose();
+                    }
+                    catch (Exception ex)
+                    {
+                        Extension.ErrorMessage($"Unable to save image {fileName}: {ex.Message}");
+                    }
+                }));
+            }
+            finally
+            {
+                _semaphore.Release();
+            }
         }
 
         private void GeneratePackage(PackageIndex pack, string indexFileName, string packageFileName)

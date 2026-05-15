@@ -21,7 +21,7 @@ addMissionEventHandler ["ExtensionCallback", {
 
 a3me_export = {
 
-	systemChat "Taking screenshots...";
+	systemChat "Taking screenshots for Topo Base...";
 
 	INFO("Export");
 
@@ -53,7 +53,7 @@ a3me_export = {
 	
 	_calibrateData call FUNC(screenShotLoop);
 
-	systemChat "Save image...";
+	systemChat "Flush image for Topo Base...";
 	sleep 0.2;
 
 	INFO("Stop TopoBase");
@@ -61,13 +61,13 @@ a3me_export = {
 
 	if ( worldSize < 40960 ) then {
 	
-		systemChat "Taking screenshots for HiRes...";
+		systemChat "Taking screenshots for Topo HiRes...";
 
 		INFO("Start TopoHiRes");
 
 		(_calibrateData call FUNC(hiresCalibrate)) call FUNC(screenShotLoop);
 
-		systemChat "Save image for HiRes...";
+		systemChat "Flush image for Topo HiRes...";
 		sleep 0.2;
 
 		INFO("Stop TopoHiRes");
@@ -93,7 +93,7 @@ a3me_export = {
 		private _aerialData = _calibrateData call FUNC(aerialCalibrate);
 		_aerialData call FUNC(aerialLoop);
 
-		systemChat "Save aerial image...";
+		systemChat "Flush aerial image...";
 		sleep 0.2;
 
 		INFO("Stop Aerial");
@@ -102,11 +102,9 @@ a3me_export = {
 		(_aerialData select 0) cameraEffect ["terminate", "BACK"];
 		camDestroy (_aerialData select 0);
 		showHUD [true, true, true, true, true, true, true, true];
-
-		systemChat "Aerial image is ready";
-
 	};
 
+	systemChat "Request package generation...";
 	// Pack after all images (topo + aerial) have been saved.
 	"mapExportExtension" callExtension ["dispose", []];
 };
