@@ -428,8 +428,9 @@ namespace MapExportExtension
                 {
                     try
                     {
-                        using var himgSource = StorageExtensions.FromUnique<TPixel>(image);
-                        using var himgChunked = await himgSource.CloneAsync(new TemporaryHugeImageStorage());
+                        using var tempStorage = new TemporaryHugeImageStorage();
+                        using var himgSource = StorageExtensions.FromUnique(image);
+                        using var himgChunked = await himgSource.CloneAsync(tempStorage);
                         await himgChunked.SaveAsync(fileName);
                         image.Dispose();
                     }
