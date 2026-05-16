@@ -1,5 +1,7 @@
 using System.IO.Compression;
 using System.Text.Json;
+using Pmad.HugeImages.IO;
+using Pmad.HugeImages.Storage;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
@@ -262,7 +264,19 @@ namespace MapExportExtension
         {
             if (_aerialFullImage != null)
             {
-                SavePngAndDisposeBackground(_aerialFullImage, Path.Combine(_dataPath, "aerial.png"));
+                string fileName;
+
+                if (_aerialFullImage.Width >= 25000) // Too large to be saved a PNG, save as HIMG instead
+                {
+                    fileName = "aerial.himg";
+                    SaveHimgAndDisposeBackground(_aerialFullImage, Path.Combine(_dataPath, fileName));
+                }
+                else 
+                {
+                    fileName = "aerial.png";
+                    SavePngAndDisposeBackground(_aerialFullImage, Path.Combine(_dataPath, fileName));
+                }
+
                 _aerialFullImage = null;
 
                 _aerialMap = new PackageIndex()
@@ -272,7 +286,7 @@ namespace MapExportExtension
                     MapName = _map.MapName,
                     EnglishTitle = _map.EnglishTitle,
                     Locations = _map.Locations,
-                    Images = [new PackageImage(0, GetAerialMaxZoom(), "aerial.png")],
+                    Images = [new PackageImage(0, GetAerialMaxZoom(), fileName)],
                     Culture = _map.Culture,
                     OriginX = _map.OriginX,
                     OriginY = _map.OriginY,
@@ -391,6 +405,32 @@ namespace MapExportExtension
                     try
                     {
                         image.SaveAsPng(Path.Combine(_dataPath, fileName));
+                        image.Dispose();
+                    }
+                    catch (Exception ex)
+                    {
+                        Extension.ErrorMessage($"Unable to save image {fileName}: {ex.Message}");
+                    }
+                }));
+            }
+            finally
+            {
+                _semaphore.Release();
+            }
+        }
+
+        private void SaveHimgAndDisposeBackground<TPixel>(Image<TPixel> image, string fileName) where TPixel : unmanaged, IPixel<TPixel>
+        {
+            _semaphore.Wait(); // Protect against concurrent access to _saveImageTasks list
+            try
+            {
+                _saveImageTasks.Add(Task.Run(async () =>
+                {
+                    try
+                    {
+                        using var himgSource = StorageExtensions.FromUnique<TPixel>(image);
+                        using var himgChunked = await himgSource.CloneAsync(new TemporaryHugeImageStorage());
+                        await himgChunked.SaveAsync(fileName);
                         image.Dispose();
                     }
                     catch (Exception ex)

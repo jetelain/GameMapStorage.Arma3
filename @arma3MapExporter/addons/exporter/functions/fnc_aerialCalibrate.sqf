@@ -29,8 +29,8 @@ showHUD [false, false, false, false, false, false, false, false];
 
 // Height: use 1.5x safety margin so the tile is always fully in-frame.
 // Exact FOV no longer matters — we use worldToScreen per tile to measure exactly.
-private _camHeight = 750; // _tileSizeM * 1.5 / (2 * tan 20);
-private _fov = 0.5; // (_tileSizeM / 2) / _camHeight; // keeps a reasonable FOV value
+private _camHeight = 750;
+private _fov = 0.5;
 private _aperture = getNumber(_lighting/"apertureStandard");
 INFO_4("camHeight=%1 FOV=%2 tileSizeM=%3 _aperture=%4",_camHeight,_fov,_tileSizeM,_aperture);
 
