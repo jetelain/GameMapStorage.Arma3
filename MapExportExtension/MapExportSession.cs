@@ -452,7 +452,7 @@ namespace MapExportExtension
 
                 foreach (var img in pack.Images)
                 {
-                    zip.CreateEntryFromFile(Path.Combine(_dataPath, img.FileName), img.FileName);
+                    zip.CreateEntryFromFile(Path.Combine(_dataPath, img.FileName), img.FileName, CompressionLevel.NoCompression);
                 }
             }
             catch (Exception ex)
