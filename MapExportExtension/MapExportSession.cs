@@ -264,18 +264,8 @@ namespace MapExportExtension
         {
             if (_aerialFullImage != null)
             {
-                string fileName;
-
-                if (_aerialFullImage.Width >= 25000) // Too large to be saved a PNG, save as HIMG instead
-                {
-                    fileName = "aerial.himg";
-                    SaveHimgAndDisposeBackground(_aerialFullImage, Path.Combine(_dataPath, fileName));
-                }
-                else 
-                {
-                    fileName = "aerial.png";
-                    SavePngAndDisposeBackground(_aerialFullImage, Path.Combine(_dataPath, fileName));
-                }
+                var fileName = "aerial.himg";
+                SaveHimgAndDisposeBackground(_aerialFullImage, Path.Combine(_dataPath, fileName));
 
                 _aerialFullImage = null;
 
