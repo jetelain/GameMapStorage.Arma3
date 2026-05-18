@@ -22,7 +22,17 @@ forceWeatherChange;
 
 sleep 0.5; // Wait for weather to update
 
+// Detect appropriate aperture
+private _aperture = 60;
 private _lighting = call FUNC(getLightingNewConfig);
+if ( isNull _lighting ) then {
+    // No lighting information, use current apperture, rounded to 5
+    _aperture = (round ((apertureParams select 0) / 5)) * 5;
+    WARNING_1("No matching LightingNew, use approximated aperture %1",_aperture);
+}
+else {
+    _aperture = getNumber(_lighting/"apertureStandard");
+};
 
 // Hide HUD so it doesn't appear in screenshots
 showHUD [false, false, false, false, false, false, false, false];
@@ -31,7 +41,6 @@ showHUD [false, false, false, false, false, false, false, false];
 // Exact FOV no longer matters — we use worldToScreen per tile to measure exactly.
 private _camHeight = 750;
 private _fov = 0.5;
-private _aperture = getNumber(_lighting/"apertureStandard");
 INFO_4("camHeight=%1 FOV=%2 tileSizeM=%3 _aperture=%4",_camHeight,_fov,_tileSizeM,_aperture);
 
 // Create a straight-down camera

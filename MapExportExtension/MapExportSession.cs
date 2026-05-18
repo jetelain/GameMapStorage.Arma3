@@ -145,7 +145,7 @@ namespace MapExportExtension
 
             Extension.InfoMessage($"Aerial: {_aerial}");
             _aerialFullImage?.Dispose();
-            _aerialFullImage = new Image<Rgb24>(fullSizePx, fullSizePx, new Rgb24(0, 0, 0));
+            _aerialFullImage = new Image<Rgb24>(fullSizePx, fullSizePx, new Rgb24(221, 221, 221));
         }
 
         private int GetAerialMaxZoom()

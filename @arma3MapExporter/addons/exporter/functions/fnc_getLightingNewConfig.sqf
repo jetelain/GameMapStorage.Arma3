@@ -42,25 +42,4 @@ for "_i" from (0) to ((count _lightingNewConfig) - 1) do
 	};
 };
 
-if ( isNull _candidateLightingNewClass ) then 
-{
-	// Otherwise just pick the one with the highest apertureStandard, which should be the brightest one	
-	private _candidateApertureStandard = 0;
-	for "_i" from (0) to ((count _lightingNewConfig) - 1) do
-	{
-		private _lightingNewClass = _lightingNewConfig select _i;
-		if (isClass _lightingNewClass) then
-		{
-			private _apertureStandard   = getNumber (_lightingNewClass/"apertureStandard");
-			
-			if ( _apertureStandard > _candidateApertureStandard ) then {
-				_candidateApertureStandard = _apertureStandard;
-				_candidateLightingNewClass = _lightingNewClass;
-			};
-		};
-	};
-};
-
-
-
 _candidateLightingNewClass
