@@ -16,7 +16,7 @@ jobs:
         dotnet-version: 10.0.x
 
     - name: Build Extension (win-x64)
-      run: dotnet publish MapExportExtension/MapExportExtension.csproj -c Release -r win-x64 -o "@arma3MapExporter"
+      run: dotnet publish MapExportExtension/MapExportExtension.csproj -c Release -r win-x64 -o "./@arma3MapExporter"
 
     - name: Build Launcher (win-x64)
       run: dotnet publish MapExportLauncher/MapExportLauncher.csproj -c Release -r win-x64 -o "bin"
@@ -30,12 +30,12 @@ jobs:
 
     - name: Build Mod
       run: hemtt release
-      working-directory: "@arma3MapExporter"
+      working-directory: "./@arma3MapExporter"
         
     - uses: Shopify/upload-to-release@master
       with:
         name: a3me.zip
-        path: "@arma3MapExporter/releases/a3me-latest.zip"
+        path: "./@arma3MapExporter/releases/a3me-latest.zip"
         repo-token: ${{ secrets.GITHUB_TOKEN }}
         content-type: application/zip
 
