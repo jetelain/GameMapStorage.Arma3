@@ -18,7 +18,6 @@ while { _x <= worldSize } do {
 		private _posA = _control ctrlMapWorldToScreen [_x,_y];
 		private _posB = _control ctrlMapWorldToScreen [_x+_w,_y+_h];
 		private _args = [_x,_y,_posA,_posB];
-		INFO_1("screenshot(%1)",_args);
 		"mapExportExtension" callExtension ["screenshot", _args];
 		_y = _y + _h;
 	};

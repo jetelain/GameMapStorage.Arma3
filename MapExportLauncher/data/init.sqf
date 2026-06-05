@@ -8,9 +8,11 @@
     // so we must wait for it rather than calling it immediately.
     waitUntil { !isNull player && !isNil "a3me_export" };
 
+    private _pos = [[], 0, 1000] call BIS_fnc_findSafePos;
+
     // Move the player to avoid spawning underground.
     player allowDamage false;
-    player setPos [worldSize / 2, worldSize / 2, 0];
+    player setPos _pos;
     sleep 2;
 
     // Register a listener for the "Complete" callback fired by the extension

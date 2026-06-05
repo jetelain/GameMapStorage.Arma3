@@ -21,7 +21,7 @@ addMissionEventHandler ["ExtensionCallback", {
 
 a3me_export = {
 
-	systemChat "Taking screenshots...";
+	systemChat "Taking screenshots for Topo Base...";
 
 	INFO("Export");
 
@@ -41,44 +41,72 @@ a3me_export = {
 		sleep 1;
 	};
 
-	INFO("Start");
+	INFO("Start TopoBase");
 
-	"mapExportExtension" callExtension ["start", [worldName, worldSize, _cities, _center, _title, _offsetX, _offsetY]];
+	// Send map infos
+	"mapExportExtension" callExtension ["map", [worldName, worldSize, _cities, _center, _title, _offsetX, _offsetY]];
+
+	// Send screen infos (for screenshot coordinates calculations)
+	"mapExportExtension" callExtension ["initscreen", [[safeZoneXAbs, safeZoneY, safeZoneWAbs, safeZoneH]]];
 
 	private _calibrateData = [1000] call FUNC(calibrate);
-
+	
 	_calibrateData call FUNC(screenShotLoop);
 
-	systemChat "Save image...";
+	systemChat "Flush image for Topo Base...";
 	sleep 0.2;
 
-	INFO("Stop");
-	"mapExportExtension" callExtension ["stop", [worldName, worldSize]];
+	INFO("Stop TopoBase");
+	"mapExportExtension" callExtension ["stop", []];
 
 	if ( worldSize < 40960 ) then {
 	
-		systemChat "Taking screenshots for HiRes...";
+		systemChat "Taking screenshots for Topo HiRes...";
 
-		INFO("Start");
+		INFO("Start TopoHiRes");
 
-		"mapExportExtension" callExtension ["histart", [worldName, worldSize]];
+		(_calibrateData call FUNC(hiresCalibrate)) call FUNC(screenShotLoop);
 
-		(_calibrateData call FUNC(recalibrate)) call FUNC(screenShotLoop);
-
-		systemChat "Save image for HiRes...";
+		systemChat "Flush image for Topo HiRes...";
 		sleep 0.2;
 
-		INFO("Stop");
-		"mapExportExtension" callExtension ["histop", [worldName, worldSize]];
-
+		INFO("Stop TopoHiRes");
+		"mapExportExtension" callExtension ["histop", []];
 	};
 
 	systemChat "Images are ready";
 
-	"mapExportExtension" callExtension ["dispose", [worldName, worldSize]];
+	if ( !visibleMap ) then {
+		// Close the topo map dialog before switching to the 3D aerial camera.
+		closeDialog 0;
+	} else {
+		// Close main map (legacy export method)
+		openMap [false, false];
+	};
 
-	// Close the export dialog.
-	closeDialog 0;
+	if ( worldSize < 40960 ) then {
+
+		systemChat "Taking aerial screenshots...";
+
+		INFO("Start Aerial");
+
+		private _aerialData = _calibrateData call FUNC(aerialCalibrate);
+		_aerialData call FUNC(aerialLoop);
+
+		systemChat "Flush aerial image...";
+		sleep 0.2;
+
+		INFO("Stop Aerial");
+		"mapExportExtension" callExtension ["aerialstop", []];
+
+		(_aerialData select 0) cameraEffect ["terminate", "BACK"];
+		camDestroy (_aerialData select 0);
+		showHUD [true, true, true, true, true, true, true, true];
+	};
+
+	systemChat "Request package generation...";
+	// Pack after all images (topo + aerial) have been saved.
+	"mapExportExtension" callExtension ["dispose", []];
 };
 
 #define DIK_HOME 0xC7 /* Home on arrow keypad */
