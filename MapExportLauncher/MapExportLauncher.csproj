@@ -6,6 +6,8 @@
 		<Nullable>enable</Nullable>
 		<AssemblyName>MapExportLauncher</AssemblyName>
 		<RootNamespace>MapExportLauncher</RootNamespace>
+		<PublishSingleFile>true</PublishSingleFile>
+
 	</PropertyGroup>
 
 	<ItemGroup>

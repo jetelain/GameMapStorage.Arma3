@@ -1,8 +1,10 @@
 
-dotnet publish MapExportExtension\MapExportExtension.csproj -r win-x64 -o ".\@arma3MapExporter"
+dotnet publish MapExportExtension\MapExportExtension.csproj -c Release -r win-x64 -o ".\@arma3MapExporter"
+
+dotnet publish MapExportLauncher\MapExportLauncher.csproj -c Release -r win-x64 -o ".\bin"
 
 cd "@arma3MapExporter"
 
-.\hemtt.exe build --release --force-release
+.\hemtt.exe release
 
 cd ..
